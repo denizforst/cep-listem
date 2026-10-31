@@ -1,6 +1,6 @@
 # Cep Listem
 
-Kişisel, çevrim dışı çalışabilen yapılacaklar listesi PWA'sı. Uygulama verileri AES-GCM ile şifrelenip cihazdaki localStorage alanında tutulur. Uygulama kendi kodunda görev veya liste verisi için sunucu isteği yapmaz. Servis çalışanı ilk yüklemede uygulama kabuğunu önbelleğe alır; Safari PWA sürüm kontrolü yapabilir. “Güncellemeleri kontrol et” düğmesi elle kontrol de sağlar.
+Kişisel, çevrim dışı çalışan ve menüler içinde farklı türlerde kayıt tutabilen PWA prototipi. Ana ekranda dört parçalı koyu temalı menü bulunur; Olaylar bölümünden Abonelikler, Yapılacaklar, Notlar, İzlenecekler veya özel menüler oluşturulabilir. Aboneliklerde ücret, dönem, yenileme tarihi ve durum; diğer menülerde başlık ve açıklama tutulabilir. Kayıtlar cihazdaki localStorage alanında AES-GCM ile şifrelenir. Uygulama kodu kayıtları sunucuya göndermez. Servis çalışanı uygulama kabuğunu önbelleğe alır; “Güncellemeleri kontrol et” düğmesi manuel kontrol sağlar.
 
 ## iPhone'a kurulum
 
@@ -14,7 +14,7 @@ Kişisel, çevrim dışı çalışabilen yapılacaklar listesi PWA'sı. Uygulama
 ## Güvenlik ve yedek
 
 - İlk açılışta en az 8 karakterli parola belirle. Parola unutulursa yerel veriler ve yedekler geri açılamaz.
-- Veriler PBKDF2-SHA256 (310.000 tur) ile türetilmiş anahtar ve AES-256-GCM kullanılarak şifrelenir. Parola cihazda saklanmaz.
+- Veriler PBKDF2-SHA256 (310.000 tur) ile türetilmiş anahtar ve AES-256-GCM kullanılarak şifrelenir. Parola cihazda saklanmaz. Eski yapılacaklar listesi biçimi yeni menü yapısına açılışta dönüştürülür.
 - Yedek dosyası şifreli JSON kapsayıcısıdır; düz metin liste içeriği içermez. İçe aktarım mevcut cihaz verilerinin yerine geçer ve onay ister.
 - Uygulama verileri web uygulamasının cihaz depolamasındadır. Safari verilerini temizlemek uygulama verisini silebilir; düzenli dışa aktarım yedeği al.
 - Parola uygulama açıkken bellekte kalır. Kullanım bitince kilit düğmesine bas.

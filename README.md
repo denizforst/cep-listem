@@ -14,7 +14,7 @@ Kişisel, çevrim dışı çalışan ve menüler içinde farklı türlerde kayı
 ## Güvenlik ve yedek
 
 - İlk açılışta en az 8 karakterli parola belirle. Parola unutulursa yerel veriler ve yedekler geri açılamaz.
-- Veriler PBKDF2-SHA256 (310.000 tur) ile türetilmiş anahtar ve AES-256-GCM kullanılarak şifrelenir. Parola cihazda saklanmaz. Eski yapılacaklar listesi biçimi yeni menü yapısına açılışta dönüştürülür.
+- Veriler PBKDF2-SHA256 (310.000 tur) ile türetilmiş anahtar ve AES-256-GCM kullanılarak şifrelenir. Parola cihazda saklanmaz. Şifre kasası kayıtları da aynı şifreli depoda tutulur; bu prototip özel bir parola yöneticisinin güvenlik denetiminden geçmiş ürünü değildir. Eski yapılacaklar listesi biçimi yeni menü yapısına açılışta dönüştürülür.
 - Yedek dosyası şifreli JSON kapsayıcısıdır; düz metin liste içeriği içermez. İçe aktarım mevcut cihaz verilerinin yerine geçer ve onay ister.
 - Uygulama verileri web uygulamasının cihaz depolamasındadır. Safari verilerini temizlemek uygulama verisini silebilir; düzenli dışa aktarım yedeği al.
 - Parola uygulama açıkken bellekte kalır. Kullanım bitince kilit düğmesine bas.

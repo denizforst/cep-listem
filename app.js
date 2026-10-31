@@ -11,6 +11,7 @@ let currentMenuId = null;
 let menuFilter = 'all';
 let eventFilter = 'all';
 let currentQuery = '';
+const revealedPasswords = new Set();
 let toastTimer;
 
 const menuTypes = {
@@ -18,6 +19,8 @@ const menuTypes = {
   tasks: { label: 'Yapılacaklar', icon: '✓', singular: 'görev' },
   notes: { label: 'Notlar', icon: '▧', singular: 'not' },
   movies: { label: 'İzlenecekler', icon: '▷', singular: 'içerik' },
+  deadlines: { label: 'Son tarihler', icon: '◷', singular: 'tarih' },
+  passwords: { label: 'Şifre kasası', icon: '⚿', singular: 'şifre' },
   custom: { label: 'Özel menü', icon: '◇', singular: 'kayıt' }
 };
 
@@ -29,7 +32,9 @@ function initialData() {
     { id: makeId(), name: 'Abonelikler', type: 'subscriptions', items: [] },
     { id: makeId(), name: 'Yapılacaklar', type: 'tasks', items: [] },
     { id: makeId(), name: 'Notlar', type: 'notes', items: [] },
-    { id: makeId(), name: 'İzlenecekler', type: 'movies', items: [] }
+    { id: makeId(), name: 'İzlenecekler', type: 'movies', items: [] },
+    { id: makeId(), name: 'Son tarihler', type: 'deadlines', items: [] },
+    { id: makeId(), name: 'Şifre kasası', type: 'passwords', items: [] }
   ];
   return { schema: 2, menus, pinned: [], homeImage: '', activeMenuId: menus[0].id };
 }
@@ -50,7 +55,7 @@ function validateData(value) {
     const type = Object.prototype.hasOwnProperty.call(menuTypes, menu.type) ? menu.type : 'custom';
     return { id: menu.id.slice(0, 100), name: menu.name.slice(0, 50), type, items: menu.items.map((item) => {
       if (!item || typeof item.id !== 'string' || typeof item.title !== 'string') throw new Error('Yedek dosyasındaki kayıt bilgileri geçersiz.');
-      return { id: item.id.slice(0, 100), title: item.title.slice(0, 160), details: String(item.details || '').slice(0, 1000), amount: String(item.amount || '').slice(0, 30), period: String(item.period || 'ay').slice(0, 20), date: String(item.date || '').slice(0, 30), status: item.status === 'cancelled' ? 'cancelled' : 'active', done: !!item.done, pinned: !!item.pinned, createdAt: Number(item.createdAt) || Date.now() };
+      return { id: item.id.slice(0, 100), title: item.title.slice(0, 160), details: String(item.details || '').slice(0, 1000), secret: String(item.secret || '').slice(0, 1000), amount: String(item.amount || '').slice(0, 30), period: String(item.period || 'ay').slice(0, 20), date: String(item.date || '').slice(0, 30), status: item.status === 'cancelled' ? 'cancelled' : 'active', done: !!item.done, pinned: !!item.pinned, createdAt: Number(item.createdAt) || Date.now() };
     }) };
   });
   return { schema: 2, menus, pinned: Array.isArray(value.pinned) ? value.pinned.filter((id) => typeof id === 'string').slice(0, 10000) : [], homeImage: typeof value.homeImage === 'string' && value.homeImage.length < 2_500_000 ? value.homeImage : '', activeMenuId: menus.some((menu) => menu.id === value.activeMenuId) ? value.activeMenuId : (menus[0]?.id || null) };
@@ -75,7 +80,7 @@ async function persist() { const record = await encryptData(appData, cryptoKey, 
 function showToast(message) { $('toast').textContent = message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2800); }
 function escapeHtml(text) { return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
 function setLocked(message = 'Kayıtların bu cihazda şifreli saklanır.') {
-  appData = null; cryptoKey = null; $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
+  appData = null; cryptoKey = null; revealedPasswords.clear(); $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
   const exists = !!localStorage.getItem(STORAGE_KEY); $('lockTitle').textContent = exists ? 'Tekrar hoş geldin' : 'Kilit oluştur'; $('unlockButton').textContent = exists ? 'Kilidi Aç' : 'Parola Oluştur';
   $('passwordInput').autocomplete = exists ? 'current-password' : 'new-password'; $('passwordInput').value = ''; $('lockError').textContent = ''; $('passwordHint').hidden = exists; setTimeout(() => $('passwordInput').focus(), 50);
 }
@@ -107,7 +112,7 @@ function renderMenus() {
   $('pageContent').innerHTML = `<section class="content-screen">
     <header class="page-header"><button class="back-button" data-page="home" aria-label="Geri">‹</button><div><h1>Menüler</h1><p>Oluşturduğun alanlar</p></div><button class="round-add" data-action="new-menu" aria-label="Yeni menü">＋</button></header>
     <label class="search-box"><span>⌕</span><input id="searchInput" placeholder="Menülerde ara" value="${escapeHtml(currentQuery)}" autocomplete="off"></label>
-    <div class="chip-row">${[['all','Tümü'],['subscriptions','Abonelik'],['tasks','Görev'],['notes','Not'],['movies','İzlenecek'],['custom','Özel']].map(([key,label]) => `<button class="filter-chip ${menuFilter === key ? 'selected' : ''}" data-menu-filter="${key}">${label}</button>`).join('')}</div>
+    <div class="chip-row">${[['all','Tümü'],['subscriptions','Abonelik'],['tasks','Görev'],['notes','Not'],['movies','İzlenecek'],['deadlines','Son tarih'],['passwords','Şifre'],['custom','Özel']].map(([key,label]) => `<button class="filter-chip ${menuFilter === key ? 'selected' : ''}" data-menu-filter="${key}">${label}</button>`).join('')}</div>
     ${visible.length ? `<div class="menu-grid">${visible.map((menu) => `<button class="menu-tile type-${menu.type}" data-open-menu="${menu.id}"><span class="tile-menu-icon">${menuTypes[menu.type].icon}</span><span class="tile-title">${escapeHtml(menu.name)}</span><span class="tile-meta">${menu.items.length} kayıt</span><span class="tile-arrow">›</span></button>`).join('')}<button class="menu-tile add-tile" data-action="new-menu"><span class="tile-menu-icon">＋</span><span class="tile-title">Yeni menü</span><span class="tile-meta">Kendi alanını oluştur</span></button></div>` : `<div class="empty-state"><span>✦</span><h3>Henüz menü yok</h3><p>Yeni menü oluşturarak başlayabilirsin.</p><button class="primary" data-action="new-menu">Menü oluştur</button></div>`}
   </section>`;
 }
@@ -136,6 +141,7 @@ function serviceClass(title) { const key = title.toLocaleLowerCase('tr'); return
 function serviceMark(title) { const key = title.toLocaleLowerCase('tr'); return key.includes('netflix') ? 'N' : key.includes('spotify') ? '≋' : key.includes('icloud') ? '☁' : key.includes('youtube') ? '▶' : key.includes('canva') ? 'C' : '◌'; }
 function itemCard(item) {
   const menu = currentMenu(); const icon = menu.type === 'tasks' ? (item.done ? '✓' : '○') : menu.type === 'movies' ? '▷' : menu.type === 'notes' ? '▧' : '◇';
+  if (menu.type === 'passwords') return `<article class="event-card password-card"><span class="event-symbol">⚿</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.details || 'Kullanıcı adı eklenmedi')}</span><code>${revealedPasswords.has(item.id) ? escapeHtml(item.secret || '') : '••••••••'}</code><button class="reveal-button" data-reveal-item="${item.id}">${revealedPasswords.has(item.id) ? 'Gizle' : 'Göster'}</button><button class="pin-item card-pin" data-pin-item="${item.id}" aria-label="Sabitle">${item.pinned ? '★' : '☆'}</button></article>`;
   return `<article class="event-card ${item.done ? 'completed' : ''}"><button class="pin-item card-pin" data-pin-item="${item.id}" aria-label="Sabitle">${item.pinned ? '★' : '☆'}</button><button class="event-card-main" data-item-menu="${item.id}"><span class="event-symbol">${icon}</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.details || (item.date ? itemDate(item) : menuTypes[menu.type].singular))}</span></button>${menu.type === 'tasks' ? `<button class="task-toggle ${item.done ? 'checked' : ''}" data-toggle-task="${item.id}" aria-label="Görevi tamamla">${item.done ? '✓' : ''}</button>` : ''}</article>`;
 }
 function renderPinned() {
@@ -160,14 +166,15 @@ function render() {
 function openDialog(title, content) { $('dialogTitle').textContent = title; $('dialogBody').innerHTML = content; $('appDialog').showModal(); }
 function closeDialog() { $('appDialog').close(); }
 function showNewMenu() {
-  openDialog('Yeni menü oluştur', `<form id="newMenuForm" class="dialog-form"><label>Menü adı<input name="name" maxlength="50" required placeholder="Örn. Abonelikler"></label><label>Menü türü<select name="type"><option value="subscriptions">Abonelikler</option><option value="tasks">Yapılacaklar</option><option value="notes">Notlar</option><option value="movies">İzlenecekler</option><option value="custom">Özel menü</option></select></label><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Oluştur</button></div></form>`);
+  openDialog('Yeni menü oluştur', `<form id="newMenuForm" class="dialog-form"><label>Menü adı<input name="name" maxlength="50" required placeholder="Örn. Abonelikler"></label><label>Menü türü<select name="type"><option value="subscriptions">Abonelikler</option><option value="tasks">Yapılacaklar</option><option value="notes">Notlar</option><option value="movies">İzlenecekler</option><option value="deadlines">Son tarihler</option><option value="passwords">Şifre kasası</option><option value="custom">Özel menü</option></select></label><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Oluştur</button></div></form>`);
   $('newMenuForm').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const name = String(form.get('name')).trim(); if (!name) return; if (appData.menus.some((menu) => menu.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'))) { showToast('Bu isimde bir menü zaten var.'); return; } const type = String(form.get('type')); const menu = { id: makeId(), name, type: Object.prototype.hasOwnProperty.call(menuTypes,type) ? type : 'custom', items: [] }; appData.menus.push(menu); currentMenuId = menu.id; currentPage = 'menu'; currentQuery = ''; closeDialog(); saveAndRender(); });
 }
 function showNewItem() {
-  const menu = currentMenu(); if (!menu) return; const isSub = menu.type === 'subscriptions';
-  const form = `<form id="newItemForm" class="dialog-form"><label>${isSub ? 'Abonelik adı' : 'Başlık'}<input name="title" maxlength="160" required placeholder="${isSub ? 'Örn. Netflix' : 'Kayıt adı'}"></label>${isSub ? `<label>Ücret<input name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Ödeme aralığı<select name="period"><option>ay</option><option>yıl</option><option>hafta</option></select></label><label>Yenileme tarihi<input name="date" type="date"></label><label>Kategori<input name="details" maxlength="100" placeholder="Eğlence, müzik…"></label><label class="check-label"><input name="active" type="checkbox" checked> Aktif abonelik</label>` : `${menu.type === 'tasks' ? `<label>Son tarih<input name="date" type="date"></label>` : ''}${menu.type === 'movies' ? `<label>Tür / yıl<input name="details" maxlength="160" placeholder="Film · 2026"></label>` : `<label>Açıklama<textarea name="details" maxlength="500" rows="3" placeholder="İsteğe bağlı ayrıntı"></textarea></label>`}` }<div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Kaydet</button></div></form>`;
+  const menu = currentMenu(); if (!menu) return; const isSub = menu.type === 'subscriptions'; const isPassword = menu.type === 'passwords';
+  const fields = isSub ? `<label>Ücret<input name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Ödeme aralığı<select name="period"><option>ay</option><option>yıl</option><option>hafta</option></select></label><label>Yenileme tarihi<input name="date" type="date"></label><label>Kategori<input name="details" maxlength="100" placeholder="Eğlence, müzik…"></label><label class="check-label"><input name="active" type="checkbox" checked> Aktif abonelik</label>` : isPassword ? `<label>Kullanıcı adı / e-posta<input name="details" maxlength="200" autocomplete="off" placeholder="İsteğe bağlı"></label><label>Şifre<input name="secret" type="password" maxlength="1000" autocomplete="new-password" required></label><label>Not<textarea name="notes" maxlength="500" rows="2" placeholder="İsteğe bağlı açıklama"></textarea></label>` : `${['tasks','deadlines'].includes(menu.type) ? `<label>Son tarih<input name="date" type="date"></label>` : ''}${menu.type === 'movies' ? `<label>Tür / yıl<input name="details" maxlength="160" placeholder="Film · 2026"></label>` : `<label>Açıklama<textarea name="details" maxlength="500" rows="3" placeholder="İsteğe bağlı ayrıntı"></textarea></label>`}`;
+  const form = `<form id="newItemForm" class="dialog-form"><label>${isSub ? 'Abonelik adı' : isPassword ? 'Hesap / site adı' : 'Başlık'}<input name="title" maxlength="160" required placeholder="${isSub ? 'Örn. Netflix' : isPassword ? 'Örn. E-posta' : 'Kayıt adı'}"></label>${fields}<div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Kaydet</button></div></form>`;
   openDialog(isSub ? 'Abonelik ekle' : `${menuTypes[menu.type].singular} ekle`, form);
-  $('newItemForm').addEventListener('submit', (event) => { event.preventDefault(); const fd = new FormData(event.currentTarget); const title = String(fd.get('title')).trim(); if (!title) return; menu.items.unshift({ id: makeId(), title, details: String(fd.get('details') || '').trim(), amount: String(fd.get('amount') || ''), period: String(fd.get('period') || 'ay'), date: String(fd.get('date') || ''), status: fd.has('active') ? 'active' : (isSub ? 'cancelled' : 'active'), done: false, pinned: false, createdAt: Date.now() }); currentQuery = ''; closeDialog(); saveAndRender(); });
+  $('newItemForm').addEventListener('submit', (event) => { event.preventDefault(); const fd = new FormData(event.currentTarget); const title = String(fd.get('title')).trim(); if (!title) return; menu.items.unshift({ id: makeId(), title, details: String(fd.get('notes') || fd.get('details') || '').trim(), secret: String(fd.get('secret') || ''), amount: String(fd.get('amount') || ''), period: String(fd.get('period') || 'ay'), date: String(fd.get('date') || ''), status: fd.has('active') ? 'active' : (isSub ? 'cancelled' : 'active'), done: false, pinned: false, createdAt: Date.now() }); currentQuery = ''; closeDialog(); saveAndRender(); });
 }
 function saveAndRender() { persist().then(render).catch(() => showToast('Kaydetme başarısız. Cihazda boş alan olduğundan emin ol.')); }
 function downloadBackup(record) { const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `cep-listem-yedek-${new Date().toISOString().slice(0, 10)}.json`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -180,7 +187,7 @@ $('unlockForm').addEventListener('submit', async (event) => { event.preventDefau
 $('mainView').addEventListener('input', (event) => { if (event.target.id !== 'searchInput') return; currentQuery = event.target.value; const position = event.target.selectionStart; if (currentPage === 'menus') renderMenus(); else if (currentPage === 'menu') renderMenu(); const updated = $('searchInput'); updated.focus(); updated.setSelectionRange(position, position); });
 $('mainView').addEventListener('click', async (event) => {
   const target = event.target.closest('button, label'); if (!target) return;
-  if (target.dataset.page) { currentPage = target.dataset.page; currentQuery = ''; render(); return; }
+  if (target.dataset.page) { if (currentMenu()?.type === 'passwords') revealedPasswords.clear(); currentPage = target.dataset.page; currentQuery = ''; render(); return; }
   if (target.dataset.action === 'new-menu') { showNewMenu(); return; }
   if (target.dataset.openMenu) { openMenu(target.dataset.openMenu); return; }
   if (target.dataset.menuFilter) { menuFilter = target.dataset.menuFilter; renderMenus(); return; }
@@ -193,6 +200,7 @@ $('mainView').addEventListener('click', async (event) => {
   if (target.dataset.action === 'pin-menu') { const key = `menu:${currentMenuId}`; appData.pinned = appData.pinned.includes(key) ? appData.pinned.filter((item) => item !== key) : [...appData.pinned, key]; saveAndRender(); return; }
   if (target.dataset.action === 'delete-menu') { const menu = currentMenu(); if (menu && confirm(`“${menu.name}” menüsü ve içindeki kayıtlar silinsin mi?`)) { appData.menus = appData.menus.filter((item) => item.id !== menu.id); currentPage = 'menus'; saveAndRender(); } return; }
   if (target.dataset.pinItem) { const menu = currentMenu(); const item = menu?.items.find((record) => record.id === target.dataset.pinItem); if (item) item.pinned = !item.pinned; saveAndRender(); return; }
+  if (target.dataset.revealItem) { const id = target.dataset.revealItem; if (revealedPasswords.has(id)) revealedPasswords.delete(id); else revealedPasswords.add(id); renderMenu(); return; }
   if (target.dataset.toggleTask) { const menu = currentMenu(); const item = menu?.items.find((record) => record.id === target.dataset.toggleTask); if (item) item.done = !item.done; saveAndRender(); return; }
   if (target.dataset.itemMenu) { const menu = currentMenu(); const item = menu?.items.find((record) => record.id === target.dataset.itemMenu); if (!item) return; const action = prompt(`“${item.title}”\n\nDüzenlemek için yeni başlık yaz. Silmek için SİL yaz. İptal etmek için boş bırak.`); if (action === null || !action.trim()) return; if (action.trim().toLocaleLowerCase('tr') === 'sil') { if (confirm('Bu kayıt silinsin mi?')) menu.items = menu.items.filter((record) => record.id !== item.id); } else item.title = action.trim().slice(0,160); saveAndRender(); }
 });

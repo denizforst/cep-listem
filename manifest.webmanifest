@@ -1,0 +1,13 @@
+{
+  "id": "./",
+  "name": "Cep Listem",
+  "short_name": "Listem",
+  "description": "Cihazında şifreli saklanan kişisel yapılacaklar listesi.",
+  "lang": "tr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#f4f1ea",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

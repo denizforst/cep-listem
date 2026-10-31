@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Cep Listem">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <title>Cep Listem</title>
+</head>
+<body>
+  <main id="app" class="shell">
+    <section id="lockedView" class="lock-card" hidden>
+      <div class="brand-mark">✓</div>
+      <p class="eyebrow">KİŞİSEL · ÇEVRİM DIŞI</p>
+      <h1 id="lockTitle">Cep Listem</h1>
+      <p id="lockMessage" class="muted">Listelerin bu cihazda şifreli saklanır.</p>
+      <form id="unlockForm" class="stack">
+        <label for="passwordInput">Parola</label>
+        <input id="passwordInput" type="password" autocomplete="current-password" minlength="8" required placeholder="En az 8 karakter">
+        <p id="passwordHint" class="hint" hidden>Bu parolayı unutma; sıfırlama veya kurtarma yolu yok.</p>
+        <button class="primary" id="unlockButton" type="submit">Kilidi Aç</button>
+        <p id="lockError" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="mainView" hidden>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">KİŞİSEL · ÇEVRİM DIŞI</p>
+          <h1>Cep Listem</h1>
+        </div>
+        <button id="lockNow" class="icon-button" aria-label="Uygulamayı kilitle" title="Kilitle">⌑</button>
+      </header>
+      <div class="privacy-note"><span class="shield">●</span> Verilerin yalnızca bu cihazda, şifreli saklanır.</div>
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="section-heading"><h2>Listeler</h2><span id="listCount" class="count"></span></div>
+          <nav id="listNav" aria-label="Yapılacaklar listeleri"></nav>
+          <form id="newListForm" class="new-list-form">
+            <input id="newListName" maxlength="50" required placeholder="Yeni liste adı" aria-label="Yeni liste adı">
+            <button class="add-list" type="submit" aria-label="Liste ekle">+</button>
+          </form>
+          <div class="sidebar-tools">
+            <button id="exportButton" class="text-button">Yedeği dışa aktar</button>
+            <label class="text-button import-label" for="importFile">Yedekten içe aktar</label>
+            <input id="importFile" type="file" accept=".json,application/json" hidden>
+            <button id="updateButton" class="text-button">Güncellemeleri kontrol et</button>
+          </div>
+        </aside>
+        <section class="tasks-panel">
+          <div class="list-title-row">
+            <div><p class="eyebrow">YAPILACAKLAR</p><h2 id="activeListTitle"></h2></div>
+            <button id="deleteListButton" class="quiet-button" title="Bu listeyi sil">Listeyi sil</button>
+          </div>
+          <form id="newTaskForm" class="task-entry">
+            <input id="newTaskText" maxlength="180" required placeholder="Aklındaki işi yaz…" aria-label="Yeni görev">
+            <button class="primary" type="submit">Ekle</button>
+          </form>
+          <div class="task-meta"><span id="taskSummary"></span><button id="clearDoneButton" class="quiet-button">Tamamlananları temizle</button></div>
+          <ul id="taskList" class="task-list"></ul>
+          <div id="emptyState" class="empty-state" hidden><span>✦</span><h3>Bu liste tertemiz</h3><p>Yeni bir görev ekleyerek başlayabilirsin.</p></div>
+        </section>
+      </div>
+      <footer>İnternet kapalıyken de kullanabilirsin.</footer>
+    </section>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </main>
+  <script src="app.js" defer></script>
+</body>
+</html>

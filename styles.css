@@ -57,3 +57,9 @@ body{background:#21121d}
 .app-screen:has(.page-home){padding:0;background:#21121d}
 #mainView:not(:has(.page-home)){padding-bottom:env(safe-area-inset-bottom)}
 .page-content:not(.page-home){padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+/* Keep scroll gestures on long pages, but never paint browser scrollbar tracks. */
+html,body{scrollbar-width:none;-ms-overflow-style:none}
+*::-webkit-scrollbar{display:none;width:0;height:0}
+/* iOS keeps a home-indicator safe area outside 100dvh; extend only the fixed home canvas into it. */
+.shell:has(.page-home){inset:0 0 calc(-1 * env(safe-area-inset-bottom));height:auto}
+#mainView:has(.page-home){top:0;bottom:calc(-1 * env(safe-area-inset-bottom));height:auto}

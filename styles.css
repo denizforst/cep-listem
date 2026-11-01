@@ -46,3 +46,6 @@ body:has(#lockedView:not([hidden])){background:#21121d}
 #lockedView:not([hidden]) .lock-form{width:min(100%,390px);align-self:center}
 /* Match the Notlarım sector to the solid iOS status-bar backing at the screen edge. */
 .page-home .sector-top{background:linear-gradient(180deg,#21121d 0%,#21121d 8%,#351725 42%,#21121d 100%)}
+#lockedView:not([hidden]){align-items:center;text-align:center}
+#lockedView:not([hidden]) .lock-mark{align-self:center}
+#lockedView:not([hidden]) .lock-form{text-align:left}

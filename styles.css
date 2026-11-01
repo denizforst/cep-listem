@@ -49,3 +49,11 @@ body:has(#lockedView:not([hidden])){background:#21121d}
 #lockedView:not([hidden]){align-items:center;text-align:center}
 #lockedView:not([hidden]) .lock-mark{align-self:center}
 #lockedView:not([hidden]) .lock-form{text-align:left}
+/* Remove the hub's hairline frame and extend one shared backdrop under iOS's status bar on every page. */
+.page-home .hub-screen:before{display:none}
+.shell{padding:0}
+body{background:#21121d}
+.app-screen{min-height:100vh;min-height:100dvh;background:linear-gradient(180deg,#21121d 0%,#21121d 8%,#34202d 25%,#100f16 74%)}
+.app-screen:has(.page-home){padding:0;background:#21121d}
+#mainView:not(:has(.page-home)){padding-bottom:env(safe-area-inset-bottom)}
+.page-content:not(.page-home){padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(10px + env(safe-area-inset-bottom))}

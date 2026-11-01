@@ -7,58 +7,65 @@ const $ = (id) => document.getElementById(id);
 let cryptoKey = null;
 let appData = null;
 let currentPage = 'home';
-let currentMenuId = null;
-let menuFilter = 'all';
-let eventFilter = 'all';
-let currentQuery = '';
-const revealedPasswords = new Set();
+let currentNoteId = null;
+let searchQuery = '';
+let noteSort = 'newest';
+let upcomingTab = 'upcoming';
+let previousImageMode = 'spark';
+const reauthenticatedNotes = new Set();
 let toastTimer;
-
-const menuTypes = {
-  subscriptions: { label: 'Abonelikler', icon: '▤', singular: 'abonelik' },
-  tasks: { label: 'Yapılacaklar', icon: '✓', singular: 'görev' },
-  notes: { label: 'Notlar', icon: '▧', singular: 'not' },
-  movies: { label: 'İzlenecekler', icon: '▷', singular: 'içerik' },
-  deadlines: { label: 'Son tarihler', icon: '◷', singular: 'tarih' },
-  passwords: { label: 'Şifre kasası', icon: '⚿', singular: 'şifre' },
-  custom: { label: 'Özel menü', icon: '◇', singular: 'kayıt' }
-};
 
 function bytesToBase64(bytes) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary); }
 function base64ToBytes(value) { const binary = atob(value); return Uint8Array.from(binary, (char) => char.charCodeAt(0)); }
 function makeId() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
-function initialData() {
-  const menus = [
-    { id: makeId(), name: 'Abonelikler', type: 'subscriptions', items: [] },
-    { id: makeId(), name: 'Yapılacaklar', type: 'tasks', items: [] },
-    { id: makeId(), name: 'Notlar', type: 'notes', items: [] },
-    { id: makeId(), name: 'İzlenecekler', type: 'movies', items: [] },
-    { id: makeId(), name: 'Son tarihler', type: 'deadlines', items: [] },
-    { id: makeId(), name: 'Şifre kasası', type: 'passwords', items: [] }
-  ];
-  return { schema: 2, menus, pinned: [], homeImage: '', activeMenuId: menus[0].id };
+function initialData() { return { schema: 3, notes: [], pinnedNoteId: null, homeImageMode: 'spark', homeImageData: '' }; }
+function legacyItemsToNotes(menus) {
+  const notes = [];
+  for (const menu of menus.slice(0, 100)) {
+    if (!menu || !Array.isArray(menu.items)) continue;
+    for (const item of menu.items.slice(0, 10000)) {
+      if (!item || typeof item.title !== 'string') continue;
+      const parts = [];
+      if (item.details) parts.push(String(item.details));
+      if (item.amount) parts.push(`Ücret: ${item.amount} / ${item.period || 'ay'}`);
+      if (item.username) parts.push(`Kullanıcı adı: ${item.username}`);
+      if (item.secret) parts.push(`Şifre: ${item.secret}`);
+      notes.push({ id: String(item.id || makeId()), title: item.title, body: parts.join('\n'), date: String(item.date || ''), dateSensitive: !!item.date, requiresPassword: menu.type === 'passwords', done: !!item.done, createdAt: Number(item.createdAt) || Date.now(), pinned: !!item.pinned });
+    }
+  }
+  return notes;
 }
 function validateData(value) {
-  if (!value || (value.schema !== 1 && value.schema !== 2)) throw new Error('Yedek dosyasının biçimi geçerli değil.');
+  if (!value || ![1, 2, 3].includes(value.schema)) throw new Error('Yedek dosyasının biçimi geçerli değil.');
   if (value.schema === 1) {
     if (!Array.isArray(value.lists)) throw new Error('Yedek dosyasındaki listeler geçersiz.');
-    const menus = value.lists.slice(0, 100).map((list) => ({
-      id: String(list.id || makeId()).slice(0, 100), name: String(list.name || 'Yapılacaklar').slice(0, 50), type: 'tasks',
-      items: Array.isArray(list.tasks) ? list.tasks.slice(0, 10000).map((task) => ({ id: String(task.id || makeId()).slice(0, 100), title: String(task.text || '').slice(0, 180), details: '', done: !!task.done, createdAt: Number(task.createdAt) || Date.now(), pinned: false })) : []
-    }));
-    if (!menus.length) menus.push({ id: makeId(), name: 'Yapılacaklar', type: 'tasks', items: [] });
-    return { schema: 2, menus, pinned: [], homeImage: '', activeMenuId: menus[0].id };
+    const notes = [];
+    for (const list of value.lists.slice(0, 100)) for (const task of (Array.isArray(list?.tasks) ? list.tasks.slice(0, 10000) : [])) {
+      if (!task || typeof task.text !== 'string') continue;
+      notes.push({ id: String(task.id || makeId()), title: task.text, body: list.name ? `Liste: ${list.name}` : '', date: '', dateSensitive: false, requiresPassword: false, done: !!task.done, createdAt: Number(task.createdAt) || Date.now(), pinned: false });
+    }
+    return normalizeNotes(notes, null, 'spark', '');
   }
-  if (!Array.isArray(value.menus) || value.menus.length > 100) throw new Error('Yedek dosyasındaki menüler geçersiz.');
-  const menus = value.menus.map((menu) => {
-    if (!menu || typeof menu.id !== 'string' || typeof menu.name !== 'string' || !Array.isArray(menu.items) || menu.items.length > 10000) throw new Error('Yedek dosyasındaki menü bilgileri geçersiz.');
-    const type = Object.prototype.hasOwnProperty.call(menuTypes, menu.type) ? menu.type : 'custom';
-    return { id: menu.id.slice(0, 100), name: menu.name.slice(0, 50), type, items: menu.items.map((item) => {
-      if (!item || typeof item.id !== 'string' || typeof item.title !== 'string') throw new Error('Yedek dosyasındaki kayıt bilgileri geçersiz.');
-      return { id: item.id.slice(0, 100), title: item.title.slice(0, 160), details: String(item.details || '').slice(0, 1000), username: String(item.username || '').slice(0, 200), secret: String(item.secret || '').slice(0, 1000), amount: String(item.amount || '').slice(0, 30), period: String(item.period || 'ay').slice(0, 20), date: String(item.date || '').slice(0, 30), status: item.status === 'cancelled' ? 'cancelled' : 'active', done: !!item.done, pinned: !!item.pinned, createdAt: Number(item.createdAt) || Date.now() };
-    }) };
+  if (value.schema === 2) {
+    if (!Array.isArray(value.menus)) throw new Error('Yedek dosyasındaki menüler geçersiz.');
+    const notes = legacyItemsToNotes(value.menus);
+    const pinned = value.menus.flatMap((menu) => Array.isArray(menu?.items) ? menu.items : []).find((item) => item?.pinned);
+    return normalizeNotes(notes, pinned?.id || null, value.homeImage ? 'custom' : 'spark', value.homeImage || '');
+  }
+  if (!Array.isArray(value.notes) || value.notes.length > 50000) throw new Error('Yedek dosyasındaki notlar geçersiz.');
+  const notes = value.notes.map((note) => {
+    if (!note || typeof note.id !== 'string' || typeof note.title !== 'string' || typeof note.body !== 'string') throw new Error('Yedek dosyasındaki not bilgileri geçersiz.');
+    const date = typeof note.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(note.date) ? note.date : '';
+    return { id: note.id.slice(0, 100), title: note.title.slice(0, 120), body: note.body.slice(0, 12000), date, dateSensitive: !!note.dateSensitive && !!date, requiresPassword: !!note.requiresPassword, done: !!note.done, createdAt: Number(note.createdAt) || Date.now(), pinned: !!note.pinned };
   });
-  return { schema: 2, menus, pinned: Array.isArray(value.pinned) ? value.pinned.filter((id) => typeof id === 'string').slice(0, 10000) : [], homeImage: typeof value.homeImage === 'string' && value.homeImage.length < 2_500_000 ? value.homeImage : '', activeMenuId: menus.some((menu) => menu.id === value.activeMenuId) ? value.activeMenuId : (menus[0]?.id || null) };
+  return normalizeNotes(notes, value.pinnedNoteId, ['spark', 'logo', 'custom'].includes(value.homeImageMode) ? value.homeImageMode : 'spark', typeof value.homeImageData === 'string' && value.homeImageData.length < 2_500_000 ? value.homeImageData : '');
+}
+function normalizeNotes(notes, pinnedNoteId, homeImageMode, homeImageData) {
+  const safeNotes = notes.slice(0, 50000).map((note) => ({ id: String(note.id || makeId()).slice(0, 100), title: String(note.title || '').slice(0, 120), body: String(note.body || '').slice(0, 12000), date: String(note.date || ''), dateSensitive: !!note.dateSensitive && !!note.date, requiresPassword: !!note.requiresPassword, done: !!note.done, createdAt: Number(note.createdAt) || Date.now(), pinned: !!note.pinned }));
+  let pin = safeNotes.find((note) => note.id === pinnedNoteId)?.id || null;
+  if (!pin) pin = safeNotes.find((note) => note.pinned)?.id || null;
+  safeNotes.forEach((note) => { note.pinned = note.id === pin; });
+  return { schema: 3, notes: safeNotes, pinnedNoteId: pin, homeImageMode, homeImageData };
 }
 async function deriveKey(password, salt) {
   const material = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
@@ -72,160 +79,150 @@ async function encryptData(data, key, salt) {
 async function decryptRecord(record, password) {
   if (!record || record.format !== BACKUP_FORMAT || record.version !== BACKUP_VERSION || record.kdf !== 'PBKDF2-SHA256' || record.iterations !== 310000) throw new Error('Dosya bu uygulamayla uyumlu bir yedek değil.');
   const salt = base64ToBytes(record.salt); const iv = base64ToBytes(record.iv); const ciphertext = base64ToBytes(record.ciphertext);
-  if (salt.length !== 16 || iv.length !== 12 || ciphertext.length > 12_000_000) throw new Error('Yedek dosyası geçersiz veya çok büyük.');
-  const key = await deriveKey(password, salt); const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-  return { data: validateData(JSON.parse(decoder.decode(plaintext))), key, salt };
+  if (salt.length !== 16 || iv.length !== 12 || ciphertext.length > 20_000_000) throw new Error('Yedek dosyası geçersiz veya çok büyük.');
+  const key = await deriveKey(password, salt); const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext); const decoded = JSON.parse(decoder.decode(plaintext));
+  return { data: validateData(decoded), key, salt, migrated: decoded.schema !== 3 };
 }
 async function persist() { const record = await encryptData(appData, cryptoKey, appData.salt); localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); }
 function showToast(message) { $('toast').textContent = message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2800); }
 function escapeHtml(text) { return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function setLocked(message = 'Kayıtların bu cihazda şifreli saklanır.') {
-  appData = null; cryptoKey = null; revealedPasswords.clear(); $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
+function setLocked(message = 'Notların bu cihazda şifreli saklanır.') {
+  appData = null; cryptoKey = null; reauthenticatedNotes.clear(); $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
   const exists = !!localStorage.getItem(STORAGE_KEY); $('lockTitle').textContent = exists ? 'Tekrar hoş geldin' : 'Kilit oluştur'; $('unlockButton').textContent = exists ? 'Kilidi Aç' : 'Parola Oluştur';
-  $('passwordInput').autocomplete = exists ? 'current-password' : 'new-password'; $('passwordInput').value = ''; $('lockError').textContent = ''; $('passwordHint').hidden = exists; setTimeout(() => $('passwordInput').focus(), 50);
+  $('passwordInput').autocomplete = exists ? 'current-password' : 'new-password'; $('passwordInput').value = ''; $('lockError').textContent = ''; $('passwordHint').hidden = exists;
 }
 async function unlock(password) {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) { const salt = crypto.getRandomValues(new Uint8Array(16)); cryptoKey = await deriveKey(password, salt); appData = { ...initialData(), salt }; await persist(); }
-  else { const result = await decryptRecord(JSON.parse(saved), password); appData = { ...result.data, salt: result.salt }; cryptoKey = result.key; await persist(); }
-  currentPage = 'home'; $('lockedView').hidden = true; $('mainView').hidden = false; render();
+  else { const result = await decryptRecord(JSON.parse(saved), password); appData = { ...result.data, salt: result.salt }; cryptoKey = result.key; if (result.migrated) await persist(); }
+  $('passwordInput').value = ''; currentPage = 'home'; $('lockedView').hidden = true; $('mainView').hidden = false; render();
 }
-function currentMenu() { return appData.menus.find((menu) => menu.id === currentMenuId); }
-function openMenu(id) { currentMenuId = id; appData.activeMenuId = id; currentPage = 'menu'; currentQuery = ''; eventFilter = 'all'; persist().then(render); }
-function goHome() { currentPage = 'home'; render(); }
-function goMenus() { currentPage = 'menus'; render(); }
-function goPinned() { currentPage = 'pinned'; render(); }
-function goSettings() { currentPage = 'settings'; render(); }
+function todayISO() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; }
+function dateDaysFromToday(iso) { const target = Date.parse(`${iso}T00:00:00Z`); const today = Date.parse(`${todayISO()}T00:00:00Z`); return Math.round((target - today) / 86400000); }
+function formatDate(iso, year = false) { if (!iso) return ''; const date = new Date(`${iso}T12:00:00`); return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', ...(year ? { year: 'numeric' } : {}) }).format(date); }
+function currentNote() { return appData.notes.find((note) => note.id === currentNoteId); }
+function sortedNotes(notes) { return [...notes].sort((a,b) => noteSort === 'oldest' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt); }
 function renderHome() {
+  const pinned = appData.notes.find((note) => note.id === appData.pinnedNoteId);
+  const center = appData.homeImageMode === 'logo' ? '<img src="./logo-default.png" alt="Seçili logo">' : appData.homeImageMode === 'custom' && appData.homeImageData ? `<img src="${appData.homeImageData}" alt="Seçilen görsel">` : '<span class="center-placeholder">✦</span>';
   $('pageContent').innerHTML = `<section class="hub-screen" aria-label="Ana menü">
-    <button class="sector sector-top" data-page="menus"><span class="sector-icon">▦</span><span>OLAYLAR</span></button>
-    <button class="sector sector-left" data-page="pinned"><span class="sector-icon">⌖</span><span>SABİTLENMİŞ<br>OLAY</span></button>
-    <button class="sector sector-right" data-action="new-menu"><span class="sector-icon">＋</span><span>YENİ MENÜ<br>OLUŞTUR</span></button>
-    <button class="sector sector-bottom" data-page="settings"><span class="sector-icon">⚙</span><span>AYARLAR</span></button>
-    <button class="hub-center" data-page="settings" aria-label="Merkez görselini ayarlardan değiştir">${appData.homeImage ? `<img src="${appData.homeImage}" alt="Seçilen merkez görseli">` : '<span class="center-placeholder">✦</span>'}</button>
     <div class="hub-rays" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <button class="sector sector-top" data-page="notes"><span class="sector-icon">▤</span><span>NOTLARIM</span></button>
+    <button class="sector sector-left" data-page="upcoming"><span class="sector-icon">◷</span><span>YAKLAŞANLAR</span></button>
+    <button class="sector sector-right" data-action="open-pinned"><span class="sector-icon">${pinned ? '★' : '☆'}</span><span>${pinned ? escapeHtml(pinned.title) : 'SABİTLENMİŞ<br>NOT'}</span></button>
+    <button class="sector sector-bottom" data-page="settings"><span class="sector-icon">⚙</span><span>AYARLAR</span></button>
+    <div class="hub-center">${center}</div>
   </section>`;
 }
-function renderMenus() {
-  const query = currentQuery.trim().toLocaleLowerCase('tr');
-  const visible = appData.menus.filter((menu) => (menuFilter === 'all' || menu.type === menuFilter) && menu.name.toLocaleLowerCase('tr').includes(query));
-  $('pageContent').innerHTML = `<section class="content-screen">
-    <header class="page-header"><button class="back-button" data-page="home" aria-label="Geri">‹</button><div><h1>Menüler</h1><p>Oluşturduğun alanlar</p></div><button class="round-add" data-action="new-menu" aria-label="Yeni menü">＋</button></header>
-    <label class="search-box"><span>⌕</span><input id="searchInput" placeholder="Menülerde ara" value="${escapeHtml(currentQuery)}" autocomplete="off"></label>
-    <div class="chip-row">${[['all','Tümü'],['subscriptions','Abonelik'],['tasks','Görev'],['notes','Not'],['movies','İzlenecek'],['deadlines','Son tarih'],['passwords','Şifre'],['custom','Özel']].map(([key,label]) => `<button class="filter-chip ${menuFilter === key ? 'selected' : ''}" data-menu-filter="${key}">${label}</button>`).join('')}</div>
-    ${visible.length ? `<div class="menu-grid">${visible.map((menu) => `<button class="menu-tile type-${menu.type}" data-open-menu="${menu.id}"><span class="tile-menu-icon">${menuTypes[menu.type].icon}</span><span class="tile-title">${escapeHtml(menu.name)}</span><span class="tile-meta">${menu.items.length} kayıt</span><span class="tile-arrow">›</span></button>`).join('')}<button class="menu-tile add-tile" data-action="new-menu"><span class="tile-menu-icon">＋</span><span class="tile-title">Yeni menü</span><span class="tile-meta">Kendi alanını oluştur</span></button></div>` : `<div class="empty-state"><span>✦</span><h3>Henüz menü yok</h3><p>Yeni menü oluşturarak başlayabilirsin.</p><button class="primary" data-action="new-menu">Menü oluştur</button></div>`}
+function noteCard(note, compact = false) {
+  const dueClass = note.dateSensitive && !note.done ? (dateDaysFromToday(note.date) < 0 ? 'overdue' : dateDaysFromToday(note.date) <= 15 ? 'urgent' : dateDaysFromToday(note.date) <= 30 ? 'soon' : '') : '';
+  const dateTag = note.dateSensitive && note.date ? `<span class="note-date ${dueClass}">◷ ${escapeHtml(formatDate(note.date, true))}</span>` : '';
+  const preview = note.requiresPassword ? 'İçeriği görüntülemek için tekrar parola gir' : (note.body || 'Açıklama yok');
+  return `<article class="note-card ${note.done ? 'is-done' : ''} ${compact ? 'compact-note' : ''}">
+    <button class="note-open" data-open-note="${note.id}"><span class="note-card-mark">${note.requiresPassword ? '▣' : '▤'}</span><strong>${escapeHtml(note.title)}</strong><span class="note-preview">${escapeHtml(preview)}</span>${dateTag}<small>${note.requiresPassword ? 'Açarken parola ister' : note.done ? 'Tamamlandı' : 'Not'}</small></button>
+    <button class="note-pin ${note.id === appData.pinnedNoteId ? 'selected' : ''}" data-pin-note="${note.id}" aria-label="${note.id === appData.pinnedNoteId ? 'Sabitlemeyi kaldır' : 'Sabitlenmiş not yap'}">${note.id === appData.pinnedNoteId ? '★' : '☆'}</button>
+    <button class="note-done ${note.done ? 'checked' : ''}" data-done-note="${note.id}" aria-label="${note.done ? 'Yapılmadı olarak işaretle' : 'Yapıldı olarak işaretle'}">${note.done ? '✓' : ''}</button>
+  </article>`;
+}
+function renderNotes() {
+  const query = searchQuery.trim().toLocaleLowerCase('tr');
+  const notes = sortedNotes(appData.notes.filter((note) => note.title.toLocaleLowerCase('tr').includes(query)));
+  $('pageContent').innerHTML = `<section class="content-screen notes-screen">
+    <header class="page-header"><button class="back-button" data-page="home" aria-label="Ana menü">‹</button><div><h1>Notlarım</h1><p>${appData.notes.length} not</p></div><button class="round-add" data-action="new-note" aria-label="Not ekle">＋</button></header>
+    <label class="search-box"><span>⌕</span><input id="searchInput" placeholder="Not adına göre ara" value="${escapeHtml(searchQuery)}" autocomplete="off"></label>
+    <label class="sort-row"><span>Sıralama</span><select id="sortSelect"><option value="newest" ${noteSort === 'newest' ? 'selected' : ''}>En yeni önce</option><option value="oldest" ${noteSort === 'oldest' ? 'selected' : ''}>En eski önce</option></select></label>
+    ${notes.length ? `<div class="notes-grid">${notes.map((note) => noteCard(note)).join('')}</div>` : `<div class="empty-state"><span>▤</span><h3>${query ? 'Not bulunamadı' : 'Henüz not yok'}</h3><p>${query ? 'Başka bir başlıkla ara.' : '＋ düğmesiyle ilk notunu oluştur.'}</p>${!query ? '<button class="primary" data-action="new-note">Not ekle</button>' : ''}</div>`}
   </section>`;
 }
-function itemDate(item) { if (!item.date) return ''; const date = new Date(`${item.date}T12:00:00`); return Number.isNaN(date.getTime()) ? item.date : new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined }).format(date); }
-function renderMenu() {
-  const menu = currentMenu(); if (!menu) { currentPage = 'menus'; render(); return; }
-  const info = menuTypes[menu.type]; const query = currentQuery.trim().toLocaleLowerCase('tr');
-  let items = menu.items.filter((item) => `${item.title} ${item.details}`.toLocaleLowerCase('tr').includes(query));
-  if (menu.type === 'subscriptions' && eventFilter !== 'all') items = items.filter((item) => item.status === eventFilter);
-  const totalMonthly = menu.items.filter((item) => item.status !== 'cancelled').reduce((sum,item) => sum + (Number(item.amount) || 0) / (item.period === 'yıl' ? 12 : item.period === 'hafta' ? 0.23 : 1), 0);
-  const filters = menu.type === 'subscriptions' ? `<div class="chip-row">${[['all','Tümü'],['active','Aktif'],['cancelled','İptal edildi']].map(([key,label]) => `<button class="filter-chip ${eventFilter === key ? 'selected' : ''}" data-event-filter="${key}">${label}</button>`).join('')}</div>` : '';
-  $('pageContent').innerHTML = `<section class="content-screen">
-    <header class="page-header"><button class="back-button" data-page="menus" aria-label="Menülere dön">‹</button><div><h1>${escapeHtml(menu.name)}</h1><p>${menu.items.length} ${info.singular} kaydı</p></div><button class="round-add" data-action="new-item" aria-label="Yeni kayıt">＋</button></header>
-    <label class="search-box"><span>⌕</span><input id="searchInput" placeholder="${escapeHtml(menu.name)} içinde ara" value="${escapeHtml(currentQuery)}" autocomplete="off"></label>
-    ${menu.type === 'subscriptions' ? `<div class="subscription-summary"><div class="summary-symbol">↗</div><div><span>Aylık toplam</span><strong>₺${totalMonthly.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong><small>${menu.items.filter(item => item.status !== 'cancelled').length} aktif abonelik</small></div></div>` : ''}
-    ${filters}
-    ${items.length ? (menu.type === 'subscriptions' ? `<div class="subscription-list">${items.map(subscriptionCard).join('')}</div>` : `<div class="event-grid">${items.map(itemCard).join('')}</div>`) : `<div class="empty-state"><span>${info.icon}</span><h3>${query ? 'Sonuç bulunamadı' : `Henüz ${info.singular} yok`}</h3><p>${query ? 'Arama sözcüğünü değiştirebilirsin.' : '＋ düğmesine dokunarak ilk kaydını ekle.'}</p>${!query ? `<button class="primary" data-action="new-item">${info.singular} ekle</button>` : ''}</div>`}
-    <div class="menu-actions"><button class="text-button" data-action="pin-menu">${appData.pinned.includes(`menu:${menu.id}`) ? '★ Menü sabitlendi' : '☆ Menüyü sabitle'}</button><button class="text-button danger-text" data-action="delete-menu">Menüyü sil</button></div>
+function renderUpcoming() {
+  const dated = appData.notes.filter((note) => note.dateSensitive && note.date && !note.done);
+  const notes = upcomingTab === 'overdue' ? dated.filter((note) => dateDaysFromToday(note.date) < 0).sort((a,b) => b.date.localeCompare(a.date)) : dated.filter((note) => dateDaysFromToday(note.date) >= 0).sort((a,b) => a.date.localeCompare(b.date));
+  $('pageContent').innerHTML = `<section class="content-screen upcoming-screen"><header class="page-header"><button class="back-button" data-page="home" aria-label="Ana menü">‹</button><div><h1>Yaklaşanlar</h1><p>Tarihli notların</p></div><span class="header-spacer"></span></header>
+    <div class="segmented"><button class="${upcomingTab === 'upcoming' ? 'selected' : ''}" data-upcoming-tab="upcoming">Yaklaşanlar</button><button class="${upcomingTab === 'overdue' ? 'selected' : ''}" data-upcoming-tab="overdue">Tarihi Geçenler</button></div>
+    ${notes.length ? `<div class="upcoming-list">${notes.map((note) => noteCard(note, true)).join('')}</div>` : `<div class="empty-state"><span>${upcomingTab === 'overdue' ? '✓' : '◷'}</span><h3>${upcomingTab === 'overdue' ? 'Geçmiş tarihli not yok' : 'Yaklaşan not yok'}</h3><p>${upcomingTab === 'overdue' ? 'Tarihi geçmiş ve tamamlanmamış notların burada görünür.' : 'Tarih eklediğin notlar burada sıralanır.'}</p></div>`}
   </section>`;
 }
-function subscriptionCard(item) {
-  const period = item.period || 'ay'; const amount = Number(item.amount) || 0; const status = item.status === 'cancelled' ? 'İptal edildi' : 'Aktif';
-  return `<article class="subscription-card"><div class="service-icon ${serviceClass(item.title)}">${serviceMark(item.title)}</div><div class="subscription-info"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.details || 'Abonelik')}</span><small>◷ ${item.date ? `${escapeHtml(itemDate(item))} tarihinde yenilenir` : 'Yenileme tarihi eklenmedi'}</small></div><div class="subscription-price"><strong>₺${amount.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong><span>/ ${escapeHtml(period)}</span><em class="status ${item.status === 'cancelled' ? 'cancelled' : ''}">${status}</em><button class="more-button" data-item-menu="${item.id}" aria-label="Kayıt seçenekleri">•••</button></div><button class="pin-item" data-pin-item="${item.id}" aria-label="Sabitle">${item.pinned ? '★' : '☆'}</button></article>`;
+function renderNote() {
+  const note = currentNote(); if (!note) { currentPage = 'notes'; render(); return; }
+  $('pageContent').innerHTML = `<section class="content-screen detail-screen"><header class="page-header"><button class="back-button" data-page="notes" aria-label="Notlara dön">‹</button><div><h1>Not</h1><p>${note.requiresPassword ? 'Parola doğrulandı' : 'Kişisel not'}</p></div><button class="round-add edit-note-button" data-action="edit-note" aria-label="Notu düzenle">···</button></header>
+    <article class="note-detail"><div class="detail-topline"><span>${note.done ? 'TAMAMLANDI' : 'NOT'}</span><button class="detail-pin ${note.id === appData.pinnedNoteId ? 'selected' : ''}" data-pin-note="${note.id}">${note.id === appData.pinnedNoteId ? '★ Sabitlenmiş' : '☆ Sabitle'}</button></div><h2>${escapeHtml(note.title)}</h2>${note.dateSensitive && note.date ? `<div class="detail-date ${note.done ? '' : dueTone(note.date)}">◷ ${escapeHtml(formatDate(note.date, true))}${dateDaysFromToday(note.date) < 0 && !note.done ? ` · ${Math.abs(dateDaysFromToday(note.date))} gün geçti` : ''}</div>` : ''}<div class="note-body">${escapeHtml(note.body).replace(/\n/g,'<br>') || '<span class="muted">Açıklama eklenmemiş.</span>'}</div><button class="complete-note ${note.done ? 'completed' : ''}" data-done-note="${note.id}">${note.done ? '✓ Yapıldı' : '○ Yapıldı olarak işaretle'}</button></article>
+  </section>`;
 }
-function serviceClass(title) { const key = title.toLocaleLowerCase('tr'); return key.includes('netflix') ? 'netflix' : key.includes('spotify') ? 'spotify' : key.includes('icloud') ? 'icloud' : key.includes('youtube') ? 'youtube' : key.includes('canva') ? 'canva' : 'generic'; }
-function serviceMark(title) { const key = title.toLocaleLowerCase('tr'); return key.includes('netflix') ? 'N' : key.includes('spotify') ? '≋' : key.includes('icloud') ? '☁' : key.includes('youtube') ? '▶' : key.includes('canva') ? 'C' : '◌'; }
-function itemCard(item) {
-  const menu = currentMenu(); const icon = menu.type === 'tasks' ? (item.done ? '✓' : '○') : menu.type === 'movies' ? '▷' : menu.type === 'notes' ? '▧' : '◇';
-  if (menu.type === 'passwords') return `<article class="event-card password-card"><span class="event-symbol">⚿</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.username || 'Kullanıcı adı eklenmedi')}</span><code>${revealedPasswords.has(item.id) ? escapeHtml(item.secret || '') : '••••••••'}</code><button class="reveal-button" data-reveal-item="${item.id}">${revealedPasswords.has(item.id) ? 'Gizle' : 'Göster'}</button><button class="more-button password-more" data-item-menu="${item.id}" aria-label="Kaydı düzenle">•••</button><button class="pin-item card-pin" data-pin-item="${item.id}" aria-label="Sabitle">${item.pinned ? '★' : '☆'}</button></article>`;
-  return `<article class="event-card ${item.done ? 'completed' : ''}"><button class="pin-item card-pin" data-pin-item="${item.id}" aria-label="Sabitle">${item.pinned ? '★' : '☆'}</button><button class="event-card-main" data-item-menu="${item.id}"><span class="event-symbol">${icon}</span><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.details || (item.date ? itemDate(item) : menuTypes[menu.type].singular))}</span></button>${menu.type === 'tasks' ? `<button class="task-toggle ${item.done ? 'checked' : ''}" data-toggle-task="${item.id}" aria-label="Görevi tamamla">${item.done ? '✓' : ''}</button>` : ''}</article>`;
-}
-function renderPinned() {
-  const records = [];
-  for (const menu of appData.menus) for (const item of menu.items) if (item.pinned || appData.pinned.includes(item.id)) records.push({ menu, item });
-  const pinnedMenus = appData.menus.filter((menu) => appData.pinned.includes(`menu:${menu.id}`));
-  const hasPinned = records.length || pinnedMenus.length;
-  $('pageContent').innerHTML = `<section class="content-screen"><header class="page-header"><button class="back-button" data-page="home" aria-label="Geri">‹</button><div><h1>Sabitlenmiş</h1><p>Hızlı erişim kayıtların</p></div></header>${hasPinned ? `<div class="event-grid">${pinnedMenus.map((menu) => `<button class="menu-tile pinned-tile" data-open-menu="${menu.id}"><span class="tile-menu-icon">★</span><span class="tile-title">${escapeHtml(menu.name)}</span><span class="tile-meta">Menü · ${menu.items.length} kayıt</span></button>`).join('')}${records.map(({menu,item}) => `<button class="menu-tile pinned-tile" data-open-menu="${menu.id}"><span class="tile-menu-icon">★</span><span class="tile-title">${escapeHtml(item.title)}</span><span class="tile-meta">${escapeHtml(menu.name)}</span></button>`).join('')}</div>` : `<div class="empty-state"><span>☆</span><h3>Henüz sabitlenmiş kayıt yok</h3><p>Menülerin içinden kayıtları sabitleyebilirsin.</p><button class="primary" data-page="menus">Menülere git</button></div>`}</section>`;
-}
+function dueTone(date) { const days = dateDaysFromToday(date); return days < 0 ? 'overdue' : days <= 15 ? 'urgent' : days <= 30 ? 'soon' : ''; }
 function renderSettings() {
-  $('pageContent').innerHTML = `<section class="content-screen settings-screen"><header class="page-header"><button class="back-button" data-page="home" aria-label="Geri">‹</button><div><h1>Ayarlar</h1><p>Uygulamanı kişiselleştir</p></div></header>
-    <div class="settings-group"><h2>Görünüm</h2><label class="settings-row upload-row"><span class="settings-icon">▧</span><span><strong>Ana ekran görseli</strong><small>Ortadaki dairede görünecek fotoğrafı seç</small></span><span class="settings-arrow">›</span><input id="homeImageInput" type="file" accept="image/*" hidden></label><button class="settings-row" data-action="remove-image"><span class="settings-icon">×</span><span><strong>Görseli kaldır</strong><small>Varsayılan simgeye dön</small></span><span class="settings-arrow">›</span></button></div>
-    <div class="settings-group"><h2>Gizlilik ve yedek</h2><div class="settings-row static-row"><span class="settings-icon">◈</span><span><strong>Yerel ve şifreli kayıt</strong><small>Veriler bu cihazda AES-GCM ile şifrelenir.</small></span></div><button class="settings-row" data-action="export"><span class="settings-icon">⇧</span><span><strong>Şifreli yedeği dışa aktar</strong><small>Yedeği güvenli bir yere kaydet</small></span><span class="settings-arrow">›</span></button><label class="settings-row upload-row"><span class="settings-icon">⇩</span><span><strong>Yedekten içe aktar</strong><small>Şifreli yedek dosyasını seç</small></span><span class="settings-arrow">›</span><input id="importFile" type="file" accept=".json,application/json" hidden></label></div>
+  const mode = appData.homeImageMode;
+  $('pageContent').innerHTML = `<section class="content-screen settings-screen"><header class="page-header"><button class="back-button" data-page="home" aria-label="Ana menü">‹</button><div><h1>Ayarlar</h1><p>Uygulama tercihleri</p></div><span class="header-spacer"></span></header>
+    <div class="settings-group"><h2>Merkez görseli</h2><p class="settings-help">Ana menünün ortasında görünecek görseli seç.</p><label class="choice-row"><input type="radio" name="imageMode" value="spark" ${mode === 'spark' ? 'checked' : ''}><span class="choice-preview spark-preview">✦</span><span><strong>Varsayılan</strong><small>Orijinal merkez simgesi</small></span></label><label class="choice-row"><input type="radio" name="imageMode" value="logo" ${mode === 'logo' ? 'checked' : ''}><span class="choice-preview logo-preview"><img src="./logo-default.png" alt="İkinci varsayılan logo"></span><span><strong>İkinci varsayılan logo</strong><small>Eklediğin logo</small></span></label><label class="choice-row"><input type="radio" name="imageMode" value="custom" ${mode === 'custom' ? 'checked' : ''}><span class="choice-preview custom-preview">＋</span><span><strong>Kendi görselim</strong><small>${appData.homeImageData ? 'Yüklediğin görsel' : 'Bir görsel yükle'}</small></span><input id="homeImageInput" type="file" accept="image/*" hidden></label><button class="secondary full-width" data-action="upload-image">Görsel yükle</button></div>
+    <div class="settings-group"><h2>Güvenlik</h2><div class="settings-row static-row"><span class="settings-icon">◈</span><span><strong>Yerel ve şifreli kayıt</strong><small>Notlar bu cihazda AES-GCM ile saklanır.</small></span></div><button class="settings-row" data-action="change-password"><span class="settings-icon">⌑</span><span><strong>Uygulama parolasını değiştir</strong><small>Yeni parola en az 8 karakter olmalı</small></span><span class="settings-arrow">›</span></button></div>
+    <div class="settings-group"><h2>Yedek</h2><button class="settings-row" data-action="export"><span class="settings-icon">⇧</span><span><strong>Şifreli yedeği dışa aktar</strong><small>Notlarını yedek dosyasına kaydet</small></span><span class="settings-arrow">›</span></button><label class="settings-row upload-row"><span class="settings-icon">⇩</span><span><strong>Yedekten içe aktar</strong><small>Şifreli yedek dosyasını seç</small></span><span class="settings-arrow">›</span><input id="importFile" type="file" accept=".json,application/json" hidden></label></div>
     <div class="settings-group"><h2>Uygulama</h2><button class="settings-row" data-action="update"><span class="settings-icon">↻</span><span><strong>Güncellemeleri kontrol et</strong><small>Yalnızca sen dokunduğunda kontrol eder</small></span><span class="settings-arrow">›</span></button><button class="settings-row" data-action="lock"><span class="settings-icon">⌑</span><span><strong>Uygulamayı kilitle</strong><small>Parola ekranına dön</small></span><span class="settings-arrow">›</span></button></div>
   </section>`;
 }
 function render() {
   if (!appData) return;
   $('pageContent').className = `page-content page-${currentPage}`;
-  if (currentPage === 'home') renderHome(); else if (currentPage === 'menus') renderMenus(); else if (currentPage === 'menu') renderMenu(); else if (currentPage === 'pinned') renderPinned(); else renderSettings();
+  if (currentPage === 'home') renderHome(); else if (currentPage === 'notes') renderNotes(); else if (currentPage === 'upcoming') renderUpcoming(); else if (currentPage === 'note') renderNote(); else renderSettings();
 }
 function openDialog(title, content) { $('dialogTitle').textContent = title; $('dialogBody').innerHTML = content; $('appDialog').showModal(); }
 function closeDialog() { $('appDialog').close(); }
-function showNewMenu() {
-  openDialog('Yeni menü oluştur', `<form id="newMenuForm" class="dialog-form"><label>Menü adı<input name="name" maxlength="50" required placeholder="Örn. Abonelikler"></label><label>Menü türü<select name="type"><option value="subscriptions">Abonelikler</option><option value="tasks">Yapılacaklar</option><option value="notes">Notlar</option><option value="movies">İzlenecekler</option><option value="deadlines">Son tarihler</option><option value="passwords">Şifre kasası</option><option value="custom">Özel menü</option></select></label><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Oluştur</button></div></form>`);
-  $('newMenuForm').addEventListener('submit', (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const name = String(form.get('name')).trim(); if (!name) return; if (appData.menus.some((menu) => menu.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'))) { showToast('Bu isimde bir menü zaten var.'); return; } const type = String(form.get('type')); const menu = { id: makeId(), name, type: Object.prototype.hasOwnProperty.call(menuTypes,type) ? type : 'custom', items: [] }; appData.menus.push(menu); currentMenuId = menu.id; currentPage = 'menu'; currentQuery = ''; closeDialog(); saveAndRender(); });
-}
-function showNewItem() {
-  const menu = currentMenu(); if (!menu) return; const isSub = menu.type === 'subscriptions'; const isPassword = menu.type === 'passwords';
-  const fields = isSub ? `<label>Ücret<input name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Ödeme aralığı<select name="period"><option>ay</option><option>yıl</option><option>hafta</option></select></label><label>Yenileme tarihi<input name="date" type="date"></label><label>Kategori<input name="details" maxlength="100" placeholder="Eğlence, müzik…"></label><label class="check-label"><input name="active" type="checkbox" checked> Aktif abonelik</label>` : isPassword ? `<label>Kullanıcı adı / e-posta<input name="username" maxlength="200" autocomplete="off" placeholder="İsteğe bağlı"></label><label>Şifre<input name="secret" type="password" maxlength="1000" autocomplete="new-password" required></label><label>Not<textarea name="details" maxlength="500" rows="2" placeholder="İsteğe bağlı açıklama"></textarea></label>` : `${['tasks','deadlines'].includes(menu.type) ? `<label>Son tarih<input name="date" type="date"></label>` : ''}${menu.type === 'movies' ? `<label>Tür / yıl<input name="details" maxlength="160" placeholder="Film · 2026"></label>` : `<label>Açıklama<textarea name="details" maxlength="500" rows="3" placeholder="İsteğe bağlı ayrıntı"></textarea></label>`}`;
-  const form = `<form id="newItemForm" class="dialog-form"><label>${isSub ? 'Abonelik adı' : isPassword ? 'Hesap / site adı' : 'Başlık'}<input name="title" maxlength="160" required placeholder="${isSub ? 'Örn. Netflix' : isPassword ? 'Örn. E-posta' : 'Kayıt adı'}"></label>${fields}<div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Kaydet</button></div></form>`;
-  openDialog(isSub ? 'Abonelik ekle' : `${menuTypes[menu.type].singular} ekle`, form);
-  $('newItemForm').addEventListener('submit', (event) => { event.preventDefault(); const fd = new FormData(event.currentTarget); const title = String(fd.get('title')).trim(); if (!title) return; menu.items.unshift({ id: makeId(), title, details: String(fd.get('details') || '').trim(), username: String(fd.get('username') || '').trim(), secret: String(fd.get('secret') || ''), amount: String(fd.get('amount') || ''), period: String(fd.get('period') || 'ay'), date: String(fd.get('date') || ''), status: fd.has('active') ? 'active' : (isSub ? 'cancelled' : 'active'), done: false, pinned: false, createdAt: Date.now() }); currentQuery = ''; closeDialog(); saveAndRender(); });
-}
-function showEditItem(id) {
-  const menu = currentMenu(); const item = menu?.items.find((record) => record.id === id); if (!menu || !item) return;
-  const isSub = menu.type === 'subscriptions'; const isPassword = menu.type === 'passwords';
-  const extras = isSub ? `<label>Ücret<input name="amount" type="number" min="0" step="0.01" value="${escapeHtml(item.amount)}"></label><label>Ödeme aralığı<select name="period"><option ${item.period === 'ay' ? 'selected' : ''}>ay</option><option ${item.period === 'yıl' ? 'selected' : ''}>yıl</option><option ${item.period === 'hafta' ? 'selected' : ''}>hafta</option></select></label><label>Yenileme tarihi<input name="date" type="date" value="${escapeHtml(item.date)}"></label><label>Kategori<input name="details" value="${escapeHtml(item.details)}"></label><label class="check-label"><input name="active" type="checkbox" ${item.status !== 'cancelled' ? 'checked' : ''}> Aktif abonelik</label>` : isPassword ? `<label>Kullanıcı adı / e-posta<input name="username" value="${escapeHtml(item.username)}" autocomplete="off"></label><label>Şifre<input name="secret" type="password" value="${escapeHtml(item.secret)}" autocomplete="new-password"></label><label>Not<textarea name="details" rows="2">${escapeHtml(item.details)}</textarea></label>` : `<label>Açıklama<textarea name="details" rows="3">${escapeHtml(item.details)}</textarea></label>${['tasks','deadlines'].includes(menu.type) ? `<label>Son tarih<input name="date" type="date" value="${escapeHtml(item.date)}"></label>` : ''}${menu.type === 'tasks' ? `<label class="check-label"><input name="done" type="checkbox" ${item.done ? 'checked' : ''}> Tamamlandı</label>` : ''}`;
-  openDialog('Kaydı düzenle', `<form id="editItemForm" class="dialog-form"><label>${isSub ? 'Abonelik adı' : isPassword ? 'Hesap / site adı' : 'Başlık'}<input name="title" maxlength="160" value="${escapeHtml(item.title)}" required></label>${extras}<div class="dialog-actions dialog-edit-actions"><button type="button" class="text-button danger-text" data-delete-item="${item.id}">Kaydı sil</button><span></span><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Kaydet</button></div></form>`);
-  $('editItemForm').addEventListener('submit', (event) => { event.preventDefault(); const fd = new FormData(event.currentTarget); item.title = String(fd.get('title')).trim(); item.details = String(fd.get('details') || '').trim(); item.username = String(fd.get('username') || '').trim(); item.amount = String(fd.get('amount') || item.amount || ''); item.period = String(fd.get('period') || item.period || 'ay'); item.date = String(fd.get('date') || ''); item.secret = String(fd.get('secret') ?? item.secret ?? ''); if (isSub) item.status = fd.has('active') ? 'active' : 'cancelled'; if (menu.type === 'tasks') item.done = fd.has('done'); closeDialog(); saveAndRender(); });
-}
 function saveAndRender() { persist().then(render).catch(() => showToast('Kaydetme başarısız. Cihazda boş alan olduğundan emin ol.')); }
-function downloadBackup(record) { const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `cep-listem-yedek-${new Date().toISOString().slice(0, 10)}.json`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
-async function exportBackup() { try { downloadBackup(await encryptData(appData, cryptoKey, appData.salt)); showToast('Şifreli yedek dosyası hazır.'); } catch { showToast('Yedek oluşturulamadı.'); } }
-async function onImportSelected(event) {
-  const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
-  if (file.size > 12_000_000) { showToast('Yedek dosyası çok büyük.'); return; }
-  openDialog('Yedekten içe aktar', `<form id="importBackupForm" class="dialog-form"><label>Yedek parolası<input name="password" type="password" autocomplete="current-password" required></label><p class="dialog-copy">İçe aktarma mevcut menü ve kayıtların yerine geçer.</p><label class="check-label"><input name="replace" type="checkbox" required> Mevcut verilerin yerine aktarmayı onaylıyorum</label><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Yedeği yükle</button></div></form>`);
-  $('importBackupForm').addEventListener('submit', async (submitEvent) => {
-    submitEvent.preventDefault(); const password = String(new FormData(submitEvent.currentTarget).get('password') || '');
-    try { const restored = await decryptRecord(JSON.parse(await file.text()), password); appData = { ...restored.data, salt: appData.salt }; currentPage = 'home'; closeDialog(); await persist(); render(); showToast('Yedek bu cihaza aktarıldı.'); }
-    catch { showToast('Yedek açılamadı. Parolayı ve dosyayı kontrol et.'); }
+function showNoteForm(note = null) {
+  const editing = !!note;
+  openDialog(editing ? 'Notu düzenle' : 'Yeni not', `<form id="noteForm" class="dialog-form"><label>Not başlığı<input name="title" maxlength="120" required value="${escapeHtml(note?.title || '')}" placeholder="Notun başlığı"></label><label>Açıklama<textarea name="body" maxlength="12000" rows="6" placeholder="Notunu yaz…">${escapeHtml(note?.body || '')}</textarea></label><label class="check-label"><input name="dateSensitive" type="checkbox" ${note?.dateSensitive ? 'checked' : ''}> Bu not tarih duyarlı</label><label id="noteDateField" class="${note?.dateSensitive ? '' : 'hidden-field'}">Tarih<input name="date" type="date" value="${escapeHtml(note?.date || '')}" ${note?.dateSensitive ? 'required' : ''}></label><label class="check-label"><input name="requiresPassword" type="checkbox" ${note?.requiresPassword ? 'checked' : ''}> Bu nota girerken tekrar uygulama parolası sor</label><div class="dialog-actions">${editing ? `<button type="button" class="text-button danger-text" data-delete-note="${note.id}">Notu sil</button><span></span>` : ''}<button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">${editing ? 'Kaydet' : 'Not ekle'}</button></div></form>`);
+  const form = $('noteForm');
+  form.querySelector('[name="dateSensitive"]').addEventListener('change', (event) => { const label = $('noteDateField'); const field = label.querySelector('input'); label.classList.toggle('hidden-field', !event.target.checked); field.required = event.target.checked; if (!event.target.checked) field.value = ''; });
+  form.addEventListener('submit', (event) => { event.preventDefault(); const fd = new FormData(form); const dateSensitive = fd.has('dateSensitive'); const values = { title: String(fd.get('title')).trim(), body: String(fd.get('body') || '').trim(), dateSensitive, date: dateSensitive ? String(fd.get('date') || '') : '', requiresPassword: fd.has('requiresPassword') };
+    if (editing) Object.assign(note, values); else appData.notes.push({ id: makeId(), ...values, done: false, createdAt: Date.now(), pinned: false });
+    searchQuery = ''; closeDialog(); saveAndRender();
   });
 }
-async function onImageSelected(event) { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (!file.type.startsWith('image/') || file.size > 1_500_000) { showToast('1,5 MB’dan küçük bir görsel seç.'); return; } const reader = new FileReader(); reader.onload = async () => { appData.homeImage = String(reader.result); await persist(); render(); showToast('Ana ekran görseli kaydedildi.'); }; reader.readAsDataURL(file); }
-async function checkForUpdate() { if (!('serviceWorker' in navigator)) { showToast('Bu tarayıcı güncelleme kontrolünü desteklemiyor.'); return; } try { const reg = await navigator.serviceWorker.getRegistration(); if (!reg) { showToast('Çevrim dışı uygulama henüz hazır değil.'); return; } await reg.update(); showToast(reg.waiting || reg.installing ? 'Yeni sürüm bulundu; uygulamayı kapatıp açınca yüklenir.' : 'Uygulama güncel.'); } catch { showToast('Kontrol edilemedi. Kayıtlı sürüm çalışmaya devam ediyor.'); } }
+function requestNotePassword(note) {
+  openDialog('Parola gerekli', `<form id="noteUnlockForm" class="dialog-form"><p class="dialog-copy">Bu notu açmak için uygulama parolanı tekrar gir.</p><label>Uygulama parolası<input name="password" type="password" autocomplete="current-password" required></label><p id="noteUnlockError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Notu aç</button></div></form>`);
+  $('noteUnlockForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = event.currentTarget; const password = String(new FormData(form).get('password') || ''); try { await decryptRecord(JSON.parse(localStorage.getItem(STORAGE_KEY)), password); form.reset(); reauthenticatedNotes.add(note.id); closeDialog(); currentNoteId = note.id; currentPage = 'note'; render(); } catch { $('noteUnlockError').textContent = 'Parola yanlış.'; } });
+}
+function openNote(id) { const note = appData.notes.find((item) => item.id === id); if (!note) return; if (note.requiresPassword && !reauthenticatedNotes.has(note.id)) requestNotePassword(note); else { currentNoteId = note.id; currentPage = 'note'; render(); } }
+function showPasswordChange() {
+  openDialog('Parolayı değiştir', `<form id="changePasswordForm" class="dialog-form"><label>Mevcut parola<input name="current" type="password" autocomplete="current-password" required></label><label>Yeni parola<input name="next" type="password" minlength="8" autocomplete="new-password" required></label><label>Yeni parola tekrar<input name="confirm" type="password" minlength="8" autocomplete="new-password" required></label><p id="passwordChangeError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Parolayı değiştir</button></div></form>`);
+  $('changePasswordForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = event.currentTarget; const fd = new FormData(form); const current = String(fd.get('current')); const next = String(fd.get('next')); const confirmNext = String(fd.get('confirm')); const error = $('passwordChangeError'); error.textContent = ''; if (next.length < 8) { error.textContent = 'Yeni parola en az 8 karakter olmalı.'; return; } if (next !== confirmNext) { error.textContent = 'Yeni parolalar eşleşmiyor.'; return; }
+    try { await decryptRecord(JSON.parse(localStorage.getItem(STORAGE_KEY)), current); const salt = crypto.getRandomValues(new Uint8Array(16)); const nextKey = await deriveKey(next, salt); const record = await encryptData(appData, nextKey, salt); localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); appData.salt = salt; cryptoKey = nextKey; form.reset(); closeDialog(); showToast('Uygulama parolası değiştirildi.'); }
+    catch { error.textContent = 'Mevcut parola yanlış veya değişiklik kaydedilemedi.'; }
+  });
+}
+function downloadBackup(record) { const blob = new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `notlarim-yedek-${new Date().toISOString().slice(0,10)}.json`; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+async function exportBackup() { try { downloadBackup(await encryptData(appData, cryptoKey, appData.salt)); showToast('Şifreli yedek dosyası hazır.'); } catch { showToast('Yedek oluşturulamadı.'); } }
+async function onImportSelected(event) {
+  const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (file.size > 20_000_000) { showToast('Yedek dosyası çok büyük.'); return; }
+  openDialog('Yedekten içe aktar', `<form id="importBackupForm" class="dialog-form"><label>Yedek parolası<input name="password" type="password" autocomplete="current-password" required></label><p class="dialog-copy">İçe aktarma mevcut notlarının yerine geçer.</p><label class="check-label"><input name="replace" type="checkbox" required> Mevcut verilerin yerine aktarmayı onaylıyorum</label><p id="importError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Yedeği yükle</button></div></form>`);
+  $('importBackupForm').addEventListener('submit', async (submitEvent) => { submitEvent.preventDefault(); try { const pass = String(new FormData(submitEvent.currentTarget).get('password') || ''); const restored = await decryptRecord(JSON.parse(await file.text()), pass); appData = { ...restored.data, salt: appData.salt }; currentPage = 'notes'; closeDialog(); await persist(); render(); showToast('Yedek aktarıldı.'); } catch { $('importError').textContent = 'Yedek açılamadı. Parolayı ve dosyayı kontrol et.'; } });
+}
+async function onImageSelected(event) { const file = event.target.files?.[0]; event.target.value = ''; if (!file) { if (appData.homeImageMode === 'custom' && !appData.homeImageData) { appData.homeImageMode = previousImageMode; render(); } return; } if (!file.type.startsWith('image/') || file.size > 1_500_000) { if (appData.homeImageMode === 'custom' && !appData.homeImageData) { appData.homeImageMode = previousImageMode; render(); } showToast('1,5 MB’dan küçük bir görsel seç.'); return; } const reader = new FileReader(); reader.onload = async () => { appData.homeImageData = String(reader.result); appData.homeImageMode = 'custom'; await persist(); render(); showToast('Merkez görseli kaydedildi.'); }; reader.readAsDataURL(file); }
+async function checkForUpdate() { if (!('serviceWorker' in navigator)) { showToast('Bu tarayıcı güncelleme kontrolünü desteklemiyor.'); return; } try { const registration = await navigator.serviceWorker.getRegistration(); if (!registration) { showToast('Çevrim dışı uygulama henüz hazır değil.'); return; } await registration.update(); showToast(registration.waiting || registration.installing ? 'Yeni sürüm bulundu; uygulamayı kapatıp açınca yüklenir.' : 'Uygulama güncel.'); } catch { showToast('Kontrol edilemedi. Kayıtlı sürüm çalışmaya devam ediyor.'); } }
 
 $('unlockForm').addEventListener('submit', async (event) => { event.preventDefault(); const password = $('passwordInput').value; $('lockError').textContent = ''; if (password.length < 8) { $('lockError').textContent = 'Parola en az 8 karakter olmalı.'; return; } try { await unlock(password); } catch { cryptoKey = null; appData = null; $('lockError').textContent = 'Parola yanlış veya yedek verisi açılamadı.'; $('passwordInput').select(); } });
-$('mainView').addEventListener('input', (event) => { if (event.target.id !== 'searchInput') return; currentQuery = event.target.value; const position = event.target.selectionStart; if (currentPage === 'menus') renderMenus(); else if (currentPage === 'menu') renderMenu(); const updated = $('searchInput'); updated.focus(); updated.setSelectionRange(position, position); });
+$('mainView').addEventListener('input', (event) => { if (event.target.id !== 'searchInput') return; searchQuery = event.target.value; const pos = event.target.selectionStart; renderNotes(); const input = $('searchInput'); input.focus(); input.setSelectionRange(pos, pos); });
+$('mainView').addEventListener('change', (event) => {
+  if (event.target.id === 'sortSelect') { noteSort = event.target.value; renderNotes(); }
+  if (event.target.name === 'imageMode') { const nextMode = event.target.value; previousImageMode = appData.homeImageMode; appData.homeImageMode = nextMode; if (nextMode === 'custom' && !appData.homeImageData) { $('homeImageInput')?.click(); } else saveAndRender(); }
+  if (event.target.id === 'homeImageInput') onImageSelected(event);
+  if (event.target.id === 'importFile') onImportSelected(event);
+});
 $('mainView').addEventListener('click', async (event) => {
   const target = event.target.closest('button, label'); if (!target) return;
-  if (target.dataset.page) { if (currentMenu()?.type === 'passwords') revealedPasswords.clear(); currentPage = target.dataset.page; currentQuery = ''; render(); return; }
-  if (target.dataset.action === 'new-menu') { showNewMenu(); return; }
-  if (target.dataset.openMenu) { openMenu(target.dataset.openMenu); return; }
-  if (target.dataset.menuFilter) { menuFilter = target.dataset.menuFilter; renderMenus(); return; }
-  if (target.dataset.eventFilter) { eventFilter = target.dataset.eventFilter; renderMenu(); return; }
-  if (target.dataset.action === 'new-item') { showNewItem(); return; }
+  if (target.dataset.page) { if (currentPage === 'note') { const note = currentNote(); if (note?.requiresPassword) reauthenticatedNotes.delete(note.id); } currentPage = target.dataset.page; searchQuery = ''; render(); return; }
+  if (target.dataset.action === 'new-note') { showNoteForm(); return; }
+  if (target.dataset.action === 'edit-note') { showNoteForm(currentNote()); return; }
+  if (target.dataset.action === 'open-pinned') { const note = appData.notes.find((item) => item.id === appData.pinnedNoteId); if (note) openNote(note.id); else { currentPage = 'notes'; render(); showToast('Önce bir notu sabitle.'); } return; }
+  if (target.dataset.action === 'upload-image') { $('homeImageInput').click(); return; }
+  if (target.dataset.action === 'change-password') { showPasswordChange(); return; }
   if (target.dataset.action === 'export') { await exportBackup(); return; }
   if (target.dataset.action === 'update') { await checkForUpdate(); return; }
-  if (target.dataset.action === 'lock') { setLocked('Uygulama kilitlendi. Kayıtların cihazında şifreli kalır.'); return; }
-  if (target.dataset.action === 'remove-image') { appData.homeImage = ''; await persist(); render(); showToast('Ana ekran görseli kaldırıldı.'); return; }
-  if (target.dataset.action === 'pin-menu') { const key = `menu:${currentMenuId}`; appData.pinned = appData.pinned.includes(key) ? appData.pinned.filter((item) => item !== key) : [...appData.pinned, key]; saveAndRender(); return; }
-  if (target.dataset.action === 'delete-menu') { const menu = currentMenu(); if (menu) openDialog('Menüyü sil?', `<p class="dialog-copy">“${escapeHtml(menu.name)}” menüsü ve içindeki tüm kayıtlar silinecek.</p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button type="button" class="primary danger-primary" data-delete-menu-confirm>Menüyü sil</button></div>`); return; }
-  if (target.dataset.pinItem) { const menu = currentMenu(); const item = menu?.items.find((record) => record.id === target.dataset.pinItem); if (item) item.pinned = !item.pinned; saveAndRender(); return; }
-  if (target.dataset.revealItem) { const id = target.dataset.revealItem; if (revealedPasswords.has(id)) revealedPasswords.delete(id); else revealedPasswords.add(id); renderMenu(); return; }
-  if (target.dataset.toggleTask) { const menu = currentMenu(); const item = menu?.items.find((record) => record.id === target.dataset.toggleTask); if (item) item.done = !item.done; saveAndRender(); return; }
-  if (target.dataset.itemMenu) { showEditItem(target.dataset.itemMenu); return; }
+  if (target.dataset.action === 'lock') { setLocked('Uygulama kilitlendi. Notların cihazında şifreli kalır.'); return; }
+  if (target.dataset.openNote) { openNote(target.dataset.openNote); return; }
+  if (target.dataset.upcomingTab) { upcomingTab = target.dataset.upcomingTab; renderUpcoming(); return; }
+  if (target.dataset.pinNote) { const id = target.dataset.pinNote; appData.pinnedNoteId = appData.pinnedNoteId === id ? null : id; appData.notes.forEach((note) => { note.pinned = note.id === appData.pinnedNoteId; }); saveAndRender(); return; }
+  if (target.dataset.doneNote) { const note = appData.notes.find((item) => item.id === target.dataset.doneNote); if (note) note.done = !note.done; saveAndRender(); return; }
+  if (target.dataset.deleteNote) { appData.notes = appData.notes.filter((note) => note.id !== target.dataset.deleteNote); if (appData.pinnedNoteId === target.dataset.deleteNote) appData.pinnedNoteId = null; reauthenticatedNotes.delete(target.dataset.deleteNote); currentNoteId = null; currentPage = 'notes'; closeDialog(); saveAndRender(); return; }
 });
-$('mainView').addEventListener('change', (event) => { if (event.target.id === 'homeImageInput') onImageSelected(event); if (event.target.id === 'importFile') onImportSelected(event); });
-$('dialogBody').addEventListener('click', (event) => {
-  if (event.target.closest('[data-close-dialog]')) { closeDialog(); return; }
-  const deleteItemButton = event.target.closest('[data-delete-item]');
-  if (deleteItemButton) { const menu = currentMenu(); if (menu) { menu.items = menu.items.filter((item) => item.id !== deleteItemButton.dataset.deleteItem); revealedPasswords.delete(deleteItemButton.dataset.deleteItem); closeDialog(); saveAndRender(); } return; }
-  if (event.target.closest('[data-delete-menu-confirm]')) { const menu = currentMenu(); if (menu) { appData.menus = appData.menus.filter((item) => item.id !== menu.id); currentPage = 'menus'; closeDialog(); saveAndRender(); } }
-});
+$('dialogBody').addEventListener('click', (event) => { if (event.target.closest('[data-close-dialog]')) { closeDialog(); return; } const remove = event.target.closest('[data-delete-note]'); if (remove) { appData.notes = appData.notes.filter((note) => note.id !== remove.dataset.deleteNote); if (appData.pinnedNoteId === remove.dataset.deleteNote) appData.pinnedNoteId = null; reauthenticatedNotes.delete(remove.dataset.deleteNote); currentNoteId = null; currentPage = 'notes'; closeDialog(); saveAndRender(); } });
 if (!window.crypto?.subtle || !window.isSecureContext) { $('lockedView').hidden = false; $('lockTitle').textContent = 'Güvenli bağlantı gerekli'; $('lockMessage').textContent = 'Şifreleme için uygulamayı HTTPS üzerinden açmalısın.'; $('unlockForm').hidden = true; } else setLocked();
 if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});

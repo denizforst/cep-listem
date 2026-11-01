@@ -16,7 +16,7 @@
 /* Keep the home page in a fixed phone-shaped canvas, centered in the side preview too. */
 #mainView:has(.page-home){height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));min-height:0;overflow:hidden}
 #mainView:has(.page-home) .page-home{display:grid;place-items:center;min-height:0;overflow:hidden}
-.page-home .hub-screen{width:min(calc(100% - 32px),430px,42dvh);height:auto;aspect-ratio:.48;min-height:0;max-height:none;margin:auto;border-radius:32px;background:#18151e;container-type:inline-size}
+.page-home .hub-screen{width:calc(100% - 32px);height:calc(100% - 24px);aspect-ratio:auto;min-height:0;max-height:none;margin:auto;border-radius:32px;background:#18151e;container-type:inline-size}
 .page-home .sector-top{clip-path:polygon(0 0,100% 0,56% 50%,44% 50%);background:radial-gradient(ellipse at 50% 25%,#351725,#21121d 78%);justify-content:initial;padding:0}
 .page-home .sector-left{clip-path:polygon(0 0,46% 50%,0 100%);background:linear-gradient(105deg,#292131,#241b2c 72%,#241a2a);padding:0}
 .page-home .sector-right{clip-path:polygon(100% 0,100% 100%,54% 50%);background:linear-gradient(255deg,#39202b,#2c1a25 72%,#291923);padding:0}
@@ -32,3 +32,4 @@
 .page-home .hub-center{width:34%}
 .page-home .sector-left>span:last-child,.page-home .sector-right>span:last-child{font-size:clamp(10px,3.2cqw,14px);letter-spacing:.04em;line-height:1.3}
 .settings-privacy{display:flex;justify-content:center;align-items:center;gap:8px;margin:28px 0 12px;color:#897e8b;font-size:10px;letter-spacing:.02em}
+@media(min-width:600px){.page-home .hub-screen{width:min(calc(100% - 32px),430px,42dvh);height:auto;aspect-ratio:.48}}

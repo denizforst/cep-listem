@@ -8,7 +8,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Notlarım">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
   <title>Notlarım</title>
 </head>
@@ -21,7 +22,7 @@
       <p id="lockMessage" class="muted">Notların bu cihazda şifreli saklanır.</p>
       <form id="unlockForm" class="lock-form">
         <label for="passwordInput">Parola</label>
-        <input id="passwordInput" type="password" autocomplete="current-password" minlength="8" required placeholder="En az 8 karakter">
+        <input id="passwordInput" type="password" autocomplete="current-password" minlength="4" required placeholder="En az 4 karakter">
         <p id="passwordHint" class="hint" hidden>Bu parolayı unutma; sıfırlama veya kurtarma yolu yok.</p>
         <button class="primary" id="unlockButton" type="submit">Kilidi Aç</button>
         <p id="lockError" class="error" role="alert"></p>
@@ -29,7 +30,6 @@
     </section>
     <section id="mainView" class="app-screen" hidden>
       <div id="pageContent" class="page-content"></div>
-      <footer class="offline-footer"><span class="privacy-dot"></span> Yalnızca bu cihazda saklanır</footer>
     </section>
     <dialog id="appDialog" class="app-dialog">
       <form method="dialog" class="dialog-dismiss"><button aria-label="Kapat">×</button></form>

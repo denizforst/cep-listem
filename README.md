@@ -13,7 +13,7 @@ Uygulama kabuğu servis çalışanı tarafından önbelleğe alınır. Uygulama 
 
 ## Güvenlik ve yedek
 
-- İlk açılışta en az 8 karakterli parola belirle. Parola unutulursa yerel veriler ve yedekler geri açılamaz.
+- İlk açılışta en az 4 karakterli parola belirle. Parola unutulursa yerel veriler ve yedekler geri açılamaz.
 - Notlar PBKDF2-SHA256 (310.000 tur) ile türetilmiş anahtar ve AES-256-GCM kullanılarak şifrelenir. Parola cihazda saklanmaz.
 - Yedek dosyası şifreli JSON kapsayıcısıdır. İçe aktarma mevcut notların yerine geçer ve parola/onay ister.
 - Tarihli, tamamlanmamış notlar Yaklaşanlar veya Tarihi Geçenler alanında görünür. Tek bir not ana ekrana sabitlenebilir.

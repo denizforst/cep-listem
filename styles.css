@@ -35,8 +35,8 @@
 /* In the installed iPhone PWA, let the home design paint behind the translucent status bar. */
 html:has(.page-home),body:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none}
 body:has(.page-home){background:#21121d}
-.shell:has(.page-home){position:fixed;inset:0;width:100%;height:100vh;height:100dvh;min-height:0;margin:0;padding:0;overflow:hidden}
-#mainView:has(.page-home){left:0;right:0;width:100%;height:100vh;height:100dvh;overflow:hidden;overscroll-behavior:none}
+.shell:has(.page-home){position:fixed;inset:0;width:100%;height:100vh;min-height:0;margin:0;padding:0;overflow:hidden}
+#mainView:has(.page-home){left:0;right:0;width:100%;height:100vh;overflow:hidden;overscroll-behavior:none}
 #mainView:has(.page-home) .page-home,#mainView:has(.page-home) .hub-screen{height:100%;min-height:0;max-height:none;overflow:hidden}
 /* Full-screen lock view: keep the background under the iOS status bar and prevent page scrolling. */
 html:has(#lockedView:not([hidden])),body:has(#lockedView:not([hidden])){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none}
@@ -61,5 +61,5 @@ body{background:#21121d}
 html,body{scrollbar-width:none;-ms-overflow-style:none}
 *::-webkit-scrollbar{display:none;width:0;height:0}
 /* iOS keeps a home-indicator safe area outside 100dvh; extend only the fixed home canvas into it. */
-.shell:has(.page-home){top:0;right:0;bottom:0;left:0;width:100%;height:100dvh;min-height:0;margin:0;padding:0;overflow:hidden}
-#mainView:has(.page-home){top:0;right:0;bottom:0;left:0;width:100%;height:100dvh;min-height:0;overflow:hidden}
+.shell:has(.page-home){top:0;right:0;bottom:0;left:0;width:100%;height:100vh;min-height:100vh;margin:0;padding:0;overflow:hidden}
+#mainView:has(.page-home){top:0;right:0;bottom:0;left:0;width:100%;height:100vh;min-height:100vh;overflow:hidden}

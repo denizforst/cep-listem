@@ -32,3 +32,9 @@
 .page-home .hub-center{width:34%}
 .page-home .sector-left>span:last-child,.page-home .sector-right>span:last-child{font-size:clamp(10px,3.2cqw,14px);letter-spacing:.04em;line-height:1.3}
 .settings-privacy{display:flex;justify-content:center;align-items:center;gap:8px;margin:28px 0 12px;color:#897e8b;font-size:10px;letter-spacing:.02em}
+/* In the installed iPhone PWA, let the home design paint behind the translucent status bar. */
+html:has(.page-home),body:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none}
+body:has(.page-home){background:#21121d}
+.shell:has(.page-home){position:fixed;inset:0;width:100%;height:100vh;height:100dvh;min-height:0;margin:0;padding:0;overflow:hidden}
+#mainView:has(.page-home){left:0;right:0;width:100%;height:100vh;height:100dvh;overflow:hidden;overscroll-behavior:none}
+#mainView:has(.page-home) .page-home,#mainView:has(.page-home) .hub-screen{height:100%;min-height:0;max-height:none;overflow:hidden}

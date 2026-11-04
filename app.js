@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.29';
+const APP_VERSION = '1.0.30';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();

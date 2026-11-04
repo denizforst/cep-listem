@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.35';
+const APP_VERSION = '1.0.36';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -16,6 +16,13 @@ let previousImageMode = 'spark';
 let activePinInput = null;
 const reauthenticatedNotes = new Set();
 let toastTimer;
+
+document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', (event) => event.preventDefault(), { passive: false });
+document.addEventListener('gestureend', (event) => event.preventDefault(), { passive: false });
+document.addEventListener('touchmove', (event) => {
+  if (event.touches.length > 1) event.preventDefault();
+}, { passive: false });
 
 function bytesToBase64(bytes) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary); }
 function base64ToBytes(value) { const binary = atob(value); return Uint8Array.from(binary, (char) => char.charCodeAt(0)); }

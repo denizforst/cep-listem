@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.23';
+const APP_VERSION = '1.0.24';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -13,6 +13,7 @@ let searchQuery = '';
 let noteSort = 'newest';
 let upcomingTab = 'upcoming';
 let previousImageMode = 'spark';
+let activePinInput = null;
 const reauthenticatedNotes = new Set();
 let toastTimer;
 
@@ -87,10 +88,13 @@ async function decryptRecord(record, password) {
 async function persist() { const record = await encryptData(appData, cryptoKey, appData.salt); localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); }
 function showToast(message) { $('toast').textContent = message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2800); }
 function escapeHtml(text) { return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+function pinField(name, label, placeholder = '4–8 rakam') { return `<label>${label}<input class="pin-input" name="${name}" type="password" inputmode="none" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" readonly required placeholder="${placeholder}"></label>`; }
+function pinKeypad() { return `<div class="pin-keypad" aria-label="Rakam tuş takımı"><button type="button" data-pin-key="1">1</button><button type="button" data-pin-key="2">2</button><button type="button" data-pin-key="3">3</button><button type="button" data-pin-key="4">4</button><button type="button" data-pin-key="5">5</button><button type="button" data-pin-key="6">6</button><button type="button" data-pin-key="7">7</button><button type="button" data-pin-key="8">8</button><button type="button" data-pin-key="9">9</button><button type="button" data-pin-key="clear" aria-label="Tümünü sil">⌫</button><button type="button" data-pin-key="0">0</button><button type="button" data-pin-key="backspace" aria-label="Son rakamı sil">←</button></div>`; }
+function pinValueIsValid(value) { return /^[0-9]{4,8}$/.test(value); }
 function setLocked(message = 'Notların bu cihazda şifreli saklanır.') {
   appData = null; cryptoKey = null; reauthenticatedNotes.clear(); $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
   const exists = !!localStorage.getItem(STORAGE_KEY); $('lockTitle').textContent = exists ? 'Tekrar hoş geldin' : 'Kilit oluştur'; $('unlockButton').textContent = exists ? 'Kilidi Aç' : 'Parola Oluştur';
-  $('passwordInput').autocomplete = exists ? 'current-password' : 'new-password'; $('passwordInput').value = ''; $('lockError').textContent = ''; $('passwordHint').hidden = exists;
+  $('passwordInput').value = ''; activePinInput = $('passwordInput'); $('lockError').textContent = ''; $('passwordHint').hidden = exists;
 }
 async function unlock(password) {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -179,13 +183,15 @@ function showNoteForm(note = null) {
   });
 }
 function requestNotePassword(note) {
-  openDialog('Parola gerekli', `<form id="noteUnlockForm" class="dialog-form"><p class="dialog-copy">Bu notu açmak için uygulama parolanı tekrar gir.</p><label>Uygulama parolası<input name="password" type="password" autocomplete="current-password" required></label><p id="noteUnlockError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Notu aç</button></div></form>`);
+  openDialog('Parola gerekli', `<form id="noteUnlockForm" class="dialog-form"><p class="dialog-copy">Bu notu açmak için uygulama parolanı tekrar gir.</p>${pinField('password', 'Uygulama parolası')}${pinKeypad()}<p id="noteUnlockError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Notu aç</button></div></form>`);
+  activePinInput = $('noteUnlockForm').elements.password;
   $('noteUnlockForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = event.currentTarget; const password = String(new FormData(form).get('password') || ''); try { await decryptRecord(JSON.parse(localStorage.getItem(STORAGE_KEY)), password); form.reset(); reauthenticatedNotes.add(note.id); closeDialog(); currentNoteId = note.id; currentPage = 'note'; render(); } catch { $('noteUnlockError').textContent = 'Parola yanlış.'; } });
 }
 function openNote(id) { const note = appData.notes.find((item) => item.id === id); if (!note) return; if (note.requiresPassword && !reauthenticatedNotes.has(note.id)) requestNotePassword(note); else { currentNoteId = note.id; currentPage = 'note'; render(); } }
 function showPasswordChange() {
-  openDialog('Parolayı değiştir', `<form id="changePasswordForm" class="dialog-form"><label>Mevcut parola<input name="current" type="password" autocomplete="current-password" required></label><label>Yeni parola<input name="next" type="password" minlength="4" autocomplete="new-password" required></label><label>Yeni parola tekrar<input name="confirm" type="password" minlength="4" autocomplete="new-password" required></label><p id="passwordChangeError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Parolayı değiştir</button></div></form>`);
-  $('changePasswordForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = event.currentTarget; const fd = new FormData(form); const current = String(fd.get('current')); const next = String(fd.get('next')); const confirmNext = String(fd.get('confirm')); const error = $('passwordChangeError'); error.textContent = ''; if (next.length < 4) { error.textContent = 'Yeni parola en az 4 karakter olmalı.'; return; } if (next !== confirmNext) { error.textContent = 'Yeni parolalar eşleşmiyor.'; return; }
+  openDialog('Parolayı değiştir', `<form id="changePasswordForm" class="dialog-form"><div class="pin-fields">${pinField('current', 'Mevcut parola')}${pinField('next', 'Yeni parola')}${pinField('confirm', 'Yeni parola tekrar')}</div>${pinKeypad()}<p id="passwordChangeError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Parolayı değiştir</button></div></form>`);
+  activePinInput = $('changePasswordForm').elements.current;
+  $('changePasswordForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = event.currentTarget; const fd = new FormData(form); const current = String(fd.get('current')); const next = String(fd.get('next')); const confirmNext = String(fd.get('confirm')); const error = $('passwordChangeError'); error.textContent = ''; if (![current, next, confirmNext].every(pinValueIsValid)) { error.textContent = 'Her parola 4–8 rakamdan oluşmalı.'; return; } if (next !== confirmNext) { error.textContent = 'Yeni parolalar eşleşmiyor.'; return; }
     try { await decryptRecord(JSON.parse(localStorage.getItem(STORAGE_KEY)), current); const salt = crypto.getRandomValues(new Uint8Array(16)); const nextKey = await deriveKey(next, salt); const record = await encryptData(appData, nextKey, salt); localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); appData.salt = salt; cryptoKey = nextKey; form.reset(); closeDialog(); showToast('Uygulama parolası değiştirildi.'); }
     catch { error.textContent = 'Mevcut parola yanlış veya değişiklik kaydedilemedi.'; }
   });
@@ -194,13 +200,25 @@ function downloadBackup(record) { const blob = new Blob([JSON.stringify(record, 
 async function exportBackup() { try { downloadBackup(await encryptData(appData, cryptoKey, appData.salt)); showToast('Şifreli yedek dosyası hazır.'); } catch { showToast('Yedek oluşturulamadı.'); } }
 async function onImportSelected(event) {
   const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (file.size > 20_000_000) { showToast('Yedek dosyası çok büyük.'); return; }
-  openDialog('Yedekten içe aktar', `<form id="importBackupForm" class="dialog-form"><label>Yedek parolası<input name="password" type="password" autocomplete="current-password" required></label><p class="dialog-copy">İçe aktarma mevcut notlarının yerine geçer.</p><label class="check-label"><input name="replace" type="checkbox" required> Mevcut verilerin yerine aktarmayı onaylıyorum</label><p id="importError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Yedeği yükle</button></div></form>`);
+  openDialog('Yedekten içe aktar', `<form id="importBackupForm" class="dialog-form">${pinField('password', 'Yedek parolası')}${pinKeypad()}<p class="dialog-copy">İçe aktarma mevcut notlarının yerine geçer.</p><label class="check-label"><input name="replace" type="checkbox" required> Mevcut verilerin yerine aktarmayı onaylıyorum</label><p id="importError" class="error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" data-close-dialog>Vazgeç</button><button class="primary" type="submit">Yedeği yükle</button></div></form>`);
+  activePinInput = $('importBackupForm').elements.password;
   $('importBackupForm').addEventListener('submit', async (submitEvent) => { submitEvent.preventDefault(); try { const pass = String(new FormData(submitEvent.currentTarget).get('password') || ''); const restored = await decryptRecord(JSON.parse(await file.text()), pass); appData = { ...restored.data, salt: appData.salt }; currentPage = 'notes'; closeDialog(); await persist(); render(); showToast('Yedek aktarıldı.'); } catch { $('importError').textContent = 'Yedek açılamadı. Parolayı ve dosyayı kontrol et.'; } });
 }
 async function onImageSelected(event) { const file = event.target.files?.[0]; event.target.value = ''; if (!file) { if (appData.homeImageMode === 'custom' && !appData.homeImageData) { appData.homeImageMode = previousImageMode; render(); } return; } if (!file.type.startsWith('image/') || file.size > 1_500_000) { if (appData.homeImageMode === 'custom' && !appData.homeImageData) { appData.homeImageMode = previousImageMode; render(); } showToast('1,5 MB’dan küçük bir görsel seç.'); return; } const reader = new FileReader(); reader.onload = async () => { appData.homeImageData = String(reader.result); appData.homeImageMode = 'custom'; await persist(); render(); showToast('Merkez görseli kaydedildi.'); }; reader.readAsDataURL(file); }
 async function checkForUpdate() { if (!('serviceWorker' in navigator)) { showToast('Bu tarayıcı güncelleme kontrolünü desteklemiyor.'); return; } try { const registration = await navigator.serviceWorker.getRegistration(); if (!registration) { showToast('Çevrim dışı uygulama henüz hazır değil.'); return; } await registration.update(); showToast(registration.waiting || registration.installing ? 'Yeni sürüm bulundu; uygulamayı kapatıp açınca yüklenir.' : 'Uygulama güncel.'); } catch { showToast('Kontrol edilemedi. Kayıtlı sürüm çalışmaya devam ediyor.'); } }
 
-$('unlockForm').addEventListener('submit', async (event) => { event.preventDefault(); const password = $('passwordInput').value; $('lockError').textContent = ''; if (!localStorage.getItem(STORAGE_KEY) && password.length < 4) { $('lockError').textContent = 'Parola en az 4 karakter olmalı.'; return; } try { await unlock(password); } catch { cryptoKey = null; appData = null; $('lockError').textContent = 'Parola yanlış veya yedek verisi açılamadı.'; $('passwordInput').select(); } });
+$('unlockForm').addEventListener('submit', async (event) => { event.preventDefault(); const password = $('passwordInput').value; $('lockError').textContent = ''; if (!pinValueIsValid(password)) { $('lockError').textContent = 'Parola 4–8 rakamdan oluşmalı.'; return; } try { await unlock(password); } catch { cryptoKey = null; appData = null; $('lockError').textContent = 'Parola yanlış veya yedek verisi açılamadı.'; $('passwordInput').select(); } });
+document.addEventListener('click', (event) => {
+  const input = event.target.closest('.pin-input');
+  if (input) { activePinInput = input; return; }
+  const key = event.target.closest('[data-pin-key]');
+  if (!key || !activePinInput?.isConnected) return;
+  const value = activePinInput.value;
+  if (key.dataset.pinKey === 'clear') activePinInput.value = '';
+  else if (key.dataset.pinKey === 'backspace') activePinInput.value = value.slice(0, -1);
+  else if (/^\d$/.test(key.dataset.pinKey) && value.length < 8) activePinInput.value = value + key.dataset.pinKey;
+  activePinInput.dispatchEvent(new Event('input', { bubbles: true }));
+});
 $('mainView').addEventListener('input', (event) => { if (event.target.id !== 'searchInput') return; searchQuery = event.target.value; const pos = event.target.selectionStart; renderNotes(); const input = $('searchInput'); input.focus(); input.setSelectionRange(pos, pos); });
 $('mainView').addEventListener('change', (event) => {
   if (event.target.id === 'sortSelect') { noteSort = event.target.value; renderNotes(); }

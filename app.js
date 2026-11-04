@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.32';
+const APP_VERSION = '1.0.33';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -31,7 +31,7 @@ function updateAppViewportHeight() {
   const isInstalledApp = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
   const screenHeight = window.innerWidth > window.innerHeight ? window.screen.width : window.screen.height;
   const baseHeight = isInstalledApp ? Math.max(window.innerHeight, screenHeight) : window.innerHeight;
-  const safeArea = isInstalledApp ? measureSafeAreaInsets() : { top: 0, bottom: 0 };
+  const safeArea = measureSafeAreaInsets();
   const height = baseHeight + safeArea.top + safeArea.bottom;
   document.documentElement.style.setProperty('--app-full-height', `${height}px`);
 }

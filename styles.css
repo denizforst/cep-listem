@@ -88,8 +88,8 @@ input,select,textarea,.search-box input{font-size:16px!important}
 #mainView:has(.page-home) .sector-bottom .sector-icon{top:72%}
 #mainView:has(.page-home) .sector-bottom>span:last-child{top:77%}
 /* Blend the status area into the top sector and remove its old one-pixel frame. */
-html:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none;background:linear-gradient(180deg,#21121d 0%,#21121d 8%,#17161f 100%)}
-body:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none;background:transparent}
+html:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none;background:#17161f}
+body:has(.page-home){width:100%;height:100%;min-height:0;overflow:hidden;overscroll-behavior:none;background:#17161f}
 #app.shell:has(.page-home),#pageContent:has(.page-home){background:#21121d}
 #mainView:has(.page-home){background:#17161f}
 .page-home .hub-screen:before{display:none}

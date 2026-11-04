@@ -16,23 +16,25 @@
 <body>
   <main id="app" class="shell">
     <section id="lockedView" class="lock-screen" hidden>
-      <div class="lock-mark">✦</div>
-      <p class="eyebrow">KİŞİSEL · ÇEVRİM DIŞI</p>
-      <h1 id="lockTitle">Notlarım</h1>
-      <p id="lockMessage" class="muted">Notların bu cihazda şifreli saklanır.</p>
-      <form id="unlockForm" class="lock-form">
-        <label for="passwordInput">Parola</label>
-        <input id="passwordInput" class="pin-input" type="password" inputmode="none" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" readonly required>
-        <div class="pin-keypad" aria-label="Rakam tuş takımı">
-          <button type="button" data-pin-key="1">1</button><button type="button" data-pin-key="2">2</button><button type="button" data-pin-key="3">3</button>
-          <button type="button" data-pin-key="4">4</button><button type="button" data-pin-key="5">5</button><button type="button" data-pin-key="6">6</button>
-          <button type="button" data-pin-key="7">7</button><button type="button" data-pin-key="8">8</button><button type="button" data-pin-key="9">9</button>
-          <span class="pin-keypad-spacer" aria-hidden="true"></span><button type="button" data-pin-key="0">0</button><button type="button" data-pin-key="backspace" aria-label="Son rakamı sil">⌫</button>
-        </div>
-        <p id="passwordHint" class="hint" hidden>Bu parolayı unutma; sıfırlama veya kurtarma yolu yok.</p>
-        <button class="primary" id="unlockButton" type="submit">Kilidi Aç</button>
-        <p id="lockError" class="error" role="alert"></p>
-      </form>
+      <div class="lock-content-group">
+        <div class="lock-mark">✦</div>
+        <p class="eyebrow">KİŞİSEL · ÇEVRİM DIŞI</p>
+        <h1 id="lockTitle">Notlarım</h1>
+        <p id="lockMessage" class="muted">Notların bu cihazda şifreli saklanır.</p>
+        <form id="unlockForm" class="lock-form">
+          <label for="passwordInput">Parola</label>
+          <input id="passwordInput" class="pin-input" type="password" inputmode="none" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" readonly required>
+          <div class="pin-keypad" aria-label="Rakam tuş takımı">
+            <button type="button" data-pin-key="1">1</button><button type="button" data-pin-key="2">2</button><button type="button" data-pin-key="3">3</button>
+            <button type="button" data-pin-key="4">4</button><button type="button" data-pin-key="5">5</button><button type="button" data-pin-key="6">6</button>
+            <button type="button" data-pin-key="7">7</button><button type="button" data-pin-key="8">8</button><button type="button" data-pin-key="9">9</button>
+            <span class="pin-keypad-spacer" aria-hidden="true"></span><button type="button" data-pin-key="0">0</button><button type="button" data-pin-key="backspace" aria-label="Son rakamı sil">⌫</button>
+          </div>
+          <p id="passwordHint" class="hint" hidden>Bu parolayı unutma; sıfırlama veya kurtarma yolu yok.</p>
+          <button class="primary" id="unlockButton" type="submit">Kilidi Aç</button>
+          <p id="lockError" class="error" role="alert"></p>
+        </form>
+      </div>
     </section>
     <section id="mainView" class="app-screen" hidden>
       <div id="pageContent" class="page-content"></div>

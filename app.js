@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.25';
+const APP_VERSION = '1.0.26';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -16,6 +16,16 @@ let previousImageMode = 'spark';
 let activePinInput = null;
 const reauthenticatedNotes = new Set();
 let toastTimer;
+
+function updateAppViewportHeight() {
+  const isInstalledApp = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const screenHeight = window.innerWidth > window.innerHeight ? window.screen.width : window.screen.height;
+  const height = isInstalledApp ? Math.max(window.innerHeight, screenHeight) : window.innerHeight;
+  document.documentElement.style.setProperty('--app-full-height', `${height}px`);
+}
+updateAppViewportHeight();
+window.addEventListener('resize', updateAppViewportHeight);
+window.screen.orientation?.addEventListener('change', updateAppViewportHeight);
 
 function bytesToBase64(bytes) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary); }
 function base64ToBytes(value) { const binary = atob(value); return Uint8Array.from(binary, (char) => char.charCodeAt(0)); }

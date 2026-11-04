@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.24';
+const APP_VERSION = '1.0.25';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -88,8 +88,8 @@ async function decryptRecord(record, password) {
 async function persist() { const record = await encryptData(appData, cryptoKey, appData.salt); localStorage.setItem(STORAGE_KEY, JSON.stringify(record)); }
 function showToast(message) { $('toast').textContent = message; $('toast').classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 2800); }
 function escapeHtml(text) { return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function pinField(name, label, placeholder = '4–8 rakam') { return `<label>${label}<input class="pin-input" name="${name}" type="password" inputmode="none" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" readonly required placeholder="${placeholder}"></label>`; }
-function pinKeypad() { return `<div class="pin-keypad" aria-label="Rakam tuş takımı"><button type="button" data-pin-key="1">1</button><button type="button" data-pin-key="2">2</button><button type="button" data-pin-key="3">3</button><button type="button" data-pin-key="4">4</button><button type="button" data-pin-key="5">5</button><button type="button" data-pin-key="6">6</button><button type="button" data-pin-key="7">7</button><button type="button" data-pin-key="8">8</button><button type="button" data-pin-key="9">9</button><button type="button" data-pin-key="clear" aria-label="Tümünü sil">⌫</button><button type="button" data-pin-key="0">0</button><button type="button" data-pin-key="backspace" aria-label="Son rakamı sil">←</button></div>`; }
+function pinField(name, label) { return `<label>${label}<input class="pin-input" name="${name}" type="password" inputmode="none" autocomplete="off" minlength="4" maxlength="8" pattern="[0-9]{4,8}" readonly required></label>`; }
+function pinKeypad() { return `<div class="pin-keypad" aria-label="Rakam tuş takımı"><button type="button" data-pin-key="1">1</button><button type="button" data-pin-key="2">2</button><button type="button" data-pin-key="3">3</button><button type="button" data-pin-key="4">4</button><button type="button" data-pin-key="5">5</button><button type="button" data-pin-key="6">6</button><button type="button" data-pin-key="7">7</button><button type="button" data-pin-key="8">8</button><button type="button" data-pin-key="9">9</button><span class="pin-keypad-spacer" aria-hidden="true"></span><button type="button" data-pin-key="0">0</button><button type="button" data-pin-key="backspace" aria-label="Son rakamı sil">⌫</button></div>`; }
 function pinValueIsValid(value) { return /^[0-9]{4,8}$/.test(value); }
 function setLocked(message = 'Notların bu cihazda şifreli saklanır.') {
   appData = null; cryptoKey = null; reauthenticatedNotes.clear(); $('mainView').hidden = true; $('lockedView').hidden = false; $('lockMessage').textContent = message;
@@ -214,8 +214,7 @@ document.addEventListener('click', (event) => {
   const key = event.target.closest('[data-pin-key]');
   if (!key || !activePinInput?.isConnected) return;
   const value = activePinInput.value;
-  if (key.dataset.pinKey === 'clear') activePinInput.value = '';
-  else if (key.dataset.pinKey === 'backspace') activePinInput.value = value.slice(0, -1);
+  if (key.dataset.pinKey === 'backspace') activePinInput.value = value.slice(0, -1);
   else if (/^\d$/.test(key.dataset.pinKey) && value.length < 8) activePinInput.value = value + key.dataset.pinKey;
   activePinInput.dispatchEvent(new Event('input', { bubbles: true }));
 });

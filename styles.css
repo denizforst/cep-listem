@@ -90,7 +90,6 @@ body:has(.page-home){background:#17161f}
 .page-home .sector-left{background:#241b2c}
 .page-home .sector-right{background:#2c1a25}
 .page-home .sector-bottom{background:#17161f}
-.page-home .sector-bottom{clip-path:polygon(0 88%,100% 88%,100% 100%,0 100%,56% 50%,44% 50%)}
 .page-home .sector{text-shadow:none}
 .page-home .sector-icon{text-shadow:none}
 .page-home .hub-center{background:#55102c;box-shadow:none}

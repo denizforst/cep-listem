@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.31';
+const APP_VERSION = '1.0.32';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -17,10 +17,22 @@ let activePinInput = null;
 const reauthenticatedNotes = new Set();
 let toastTimer;
 
+function measureSafeAreaInsets() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.append(probe);
+  const style = getComputedStyle(probe);
+  const top = Number.parseFloat(style.paddingTop) || 0;
+  const bottom = Number.parseFloat(style.paddingBottom) || 0;
+  probe.remove();
+  return { top, bottom };
+}
 function updateAppViewportHeight() {
   const isInstalledApp = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
   const screenHeight = window.innerWidth > window.innerHeight ? window.screen.width : window.screen.height;
-  const height = isInstalledApp ? Math.max(window.innerHeight, screenHeight) : window.innerHeight;
+  const baseHeight = isInstalledApp ? Math.max(window.innerHeight, screenHeight) : window.innerHeight;
+  const safeArea = isInstalledApp ? measureSafeAreaInsets() : { top: 0, bottom: 0 };
+  const height = baseHeight + safeArea.top + safeArea.bottom;
   document.documentElement.style.setProperty('--app-full-height', `${height}px`);
 }
 updateAppViewportHeight();

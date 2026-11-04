@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'cep-listem.encrypted.v1';
-const APP_VERSION = '1.0.39';
+const APP_VERSION = '1.0.40';
 const BACKUP_FORMAT = 'cep-listem-backup';
 const BACKUP_VERSION = 1;
 const encoder = new TextEncoder();
@@ -16,6 +16,16 @@ let previousImageMode = 'spark';
 let activePinInput = null;
 const reauthenticatedNotes = new Set();
 let toastTimer;
+
+function updateAppViewportHeight() {
+  const installed = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const screenHeight = window.innerWidth > window.innerHeight ? window.screen.width : window.screen.height;
+  const height = installed ? Math.max(window.innerHeight, screenHeight) : window.innerHeight;
+  document.documentElement.style.setProperty('--app-full-height', `${height}px`);
+}
+updateAppViewportHeight();
+window.addEventListener('resize', updateAppViewportHeight);
+window.screen.orientation?.addEventListener('change', updateAppViewportHeight);
 
 document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
 document.addEventListener('gesturechange', (event) => event.preventDefault(), { passive: false });
